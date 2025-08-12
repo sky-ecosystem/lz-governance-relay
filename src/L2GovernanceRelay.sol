@@ -25,12 +25,12 @@ contract L2GovernanceRelay {
     // --- storage variables ---
 
     mapping(address => uint256) public wards;
-    GovernanceControllerLike    public l2oapp;
+    GovernanceControllerLike    public l2Oapp;
     address                     public l1GovernanceRelay;
 
     // --- immutables ---
 
-    uint32 immutable public l1Eid; // TODO: make sure this can not change
+    uint32 immutable public l1Eid;
 
     // --- events ---
 
@@ -46,9 +46,9 @@ contract L2GovernanceRelay {
     }
 
     modifier messageAuth() {
-        (uint32 originEid, bytes32 originCaller) = l2oapp.messageOrigin();
+        (uint32 originEid, bytes32 originCaller) = l2Oapp.messageOrigin();
         require(
-            msg.sender                              == address(l2oapp) &&
+            msg.sender                              == address(l2Oapp) &&
             originEid                               == l1Eid &&
             address(uint160(uint256(originCaller))) == l1GovernanceRelay,
             "L2GovernanceRelay/bad-message-auth"
@@ -78,7 +78,7 @@ contract L2GovernanceRelay {
     }
 
     function file(bytes32 what, address data) external auth {
-        if      (what == "l2oapp")            l2oapp            = GovernanceControllerLike(data);
+        if      (what == "l2Oapp")            l2Oapp            = GovernanceControllerLike(data);
         else if (what == "l1GovernanceRelay") l1GovernanceRelay = data;
         else revert("L2GovernanceRelay/file-unrecognized-param");
         emit File(what, data);

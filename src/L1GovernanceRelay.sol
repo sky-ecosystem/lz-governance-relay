@@ -67,7 +67,7 @@ contract L1GovernanceRelay {
 
     mapping(address => uint256) public wards;
     TokenLike                   public lzToken;
-    GovernanceControllerLike    public l1oapp;
+    GovernanceControllerLike    public l1Oapp;
 
     // --- events ---
 
@@ -103,7 +103,7 @@ contract L1GovernanceRelay {
 
     function file(bytes32 what, address data) external auth {
         if      (what == "lzToken") lzToken = TokenLike(data);
-        else if (what == "l1oapp")  l1oapp  = GovernanceControllerLike(data);
+        else if (what == "l1Oapp")  l1Oapp  = GovernanceControllerLike(data);
         else revert("L1GovernanceRelay/file-unrecognized-param");
         emit File(what, data);
     }
@@ -138,10 +138,10 @@ contract L1GovernanceRelay {
         });
 
         if (fee.nativeFee > 0) {
-            l1oapp.sendEVMAction{value: fee.nativeFee}(message, dstEid, extraOptions, fee, refundAddress);
+            l1Oapp.sendEVMAction{value: fee.nativeFee}(message, dstEid, extraOptions, fee, refundAddress);
         } else if (fee.lzTokenFee > 0) {
-            lzToken.approve(address(l1oapp), fee.lzTokenFee);
-            l1oapp.sendEVMAction(message, dstEid, extraOptions, fee, refundAddress);
+            lzToken.approve(address(l1Oapp), fee.lzTokenFee);
+            l1Oapp.sendEVMAction(message, dstEid, extraOptions, fee, refundAddress);
         } else revert("L1GovernanceRelay/zero-fee");
     }
 
@@ -153,10 +153,10 @@ contract L1GovernanceRelay {
         bytes calldata        message
     ) external payable auth {
         if (fee.nativeFee > 0) {
-            l1oapp.sendRawBytesAction{value: fee.nativeFee}(message, dstEid, extraOptions, fee, refundAddress);
+            l1Oapp.sendRawBytesAction{value: fee.nativeFee}(message, dstEid, extraOptions, fee, refundAddress);
         } else if (fee.lzTokenFee > 0) {
-            lzToken.approve(address(l1oapp), fee.lzTokenFee);
-            l1oapp.sendRawBytesAction(message, dstEid, extraOptions, fee, refundAddress);
+            lzToken.approve(address(l1Oapp), fee.lzTokenFee);
+            l1Oapp.sendRawBytesAction(message, dstEid, extraOptions, fee, refundAddress);
         } else revert("L1GovernanceRelay/zero-fee");
     }
 }
