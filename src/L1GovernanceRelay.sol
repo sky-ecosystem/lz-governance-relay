@@ -124,6 +124,10 @@ contract L1GovernanceRelay {
         lzToken.transfer(receiver, amount);
     }
 
+    // It is not likely that lzTokenFee is used, but if so, governance is assumed to monitor LZ for token changes.
+    // If deemed needed, this includes a check in the spell itself and fallback code.
+    // Note that just reading the token from the endpoint might pose a security risk if the token is malicious.
+    // The above is relevant also to relayRawBytes.
     function relayEVM(
         uint32                dstEid,
         bytes calldata        extraOptions,
