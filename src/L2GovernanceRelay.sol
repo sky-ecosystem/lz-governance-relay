@@ -17,6 +17,7 @@
 
 pragma solidity ^0.8.21;
 
+// https://github.com/sky-ecosystem/sky-oapp-oft/blob/08e5065815a9b7ecff62656aed3fb843b4cf387f/contracts/IGovernanceController.sol#L4
 interface GovernanceControllerLike {
     function messageOrigin() external view returns (uint32 eid, bytes32 caller);
 }

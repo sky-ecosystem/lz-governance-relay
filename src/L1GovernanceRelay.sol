@@ -17,6 +17,13 @@
 
 pragma solidity ^0.8.21;
 
+// Note: we assume that if used, the LZ token is examined to be standard and revert on failure
+interface TokenLike {
+    function approve(address spender, uint256 amount) external;
+    function transfer(address recipient, uint256 amount) external;
+}
+
+// https://github.com/sky-ecosystem/sky-oapp-oft/blob/08e5065815a9b7ecff62656aed3fb843b4cf387f/contracts/GovernanceControllerOApp.sol
 interface GovernanceControllerLike {
     function sendEVMAction(
         GovernanceMessage calldata _message,
@@ -33,18 +40,18 @@ interface GovernanceControllerLike {
         MessagingFee calldata _fee,
         address               _refundAddress
     ) external payable;
-}
 
-// Note: we assume that if used, the LZ token is examined to be standard and revert on failure
-interface TokenLike {
-    function approve(address spender, uint256 amount) external;
-    function transfer(address recipient, uint256 amount) external;
+    enum GovernanceAction {
+        UNDEFINED,
+        EVM_CALL
+    }
 }
 
 interface L2GovernanceRelayLike {
     function relay(address target, bytes calldata targetData) external;
 }
 
+// https://github.com/sky-ecosystem/sky-oapp-oft/blob/08e5065815a9b7ecff62656aed3fb843b4cf387f/contracts/GovernanceMessageEVMCodec.sol#L20
 struct GovernanceMessage {
     uint8 action;
     bytes32 originCaller;
@@ -52,14 +59,10 @@ struct GovernanceMessage {
     bytes callData;
 }
 
+// https://github.com/LayerZero-Labs/LayerZero-v2/blob/200cda254120375f40ed0a7e89931afb897b8891/packages/layerzero-v2/evm/protocol/contracts/interfaces/ILayerZeroEndpointV2.sol#L24
 struct MessagingFee {
     uint256 nativeFee;
     uint256 lzTokenFee;
-}
-
-enum GovernanceAction {
-    UNDEFINED,
-    EVM_CALL
 }
 
 contract L1GovernanceRelay {
@@ -131,7 +134,7 @@ contract L1GovernanceRelay {
         bytes calldata        targetData
     ) external payable auth {
         GovernanceMessage memory message = GovernanceMessage({
-            action           : uint8(GovernanceAction.EVM_CALL),
+            action           : uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
             originCaller     : bytes32(uint256(uint160(address(this)))),
             governedContract : l2GovernanceRelay,
             callData         : abi.encodeCall(L2GovernanceRelayLike.relay, (target, targetData))

@@ -19,7 +19,7 @@ pragma solidity ^0.8.21;
 
 import "dss-test/DssTest.sol";
 
-import { L1GovernanceRelay, MessagingFee, GovernanceAction } from "src/L1GovernanceRelay.sol";
+import { L1GovernanceRelay, MessagingFee, GovernanceControllerLike } from "src/L1GovernanceRelay.sol";
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
 import { OappMock } from "test/mocks/OappMock.sol";
 import { GemMock } from "test/mocks/GemMock.sol";
@@ -133,7 +133,7 @@ contract L1GovernanceRelayTest is DssTest {
 
         vm.expectEmit(true, true, true, true);
         emit SentMessageEVM(
-            /* action */            uint8(GovernanceAction.EVM_CALL),
+            /* action */            uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
             /* originCaller */      bytes32(uint256(uint160(address(relay)))),
             /* governedContract */  address(callee), // address(0x555),
             /* callData */          abi.encodeCall(L2GovernanceRelay.relay, (address(0x666), "789")),
@@ -164,7 +164,7 @@ contract L1GovernanceRelayTest is DssTest {
 
         vm.expectEmit(true, true, true, true);
         emit SentMessageEVM(
-            /* action */            uint8(GovernanceAction.EVM_CALL),
+            /* action */            uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
             /* originCaller */      bytes32(uint256(uint160(address(relay)))),
             /* governedContract */  address(0x555),
             /* callData */          abi.encodeCall(L2GovernanceRelay.relay, (address(0x666), "789")),
@@ -211,7 +211,7 @@ contract L1GovernanceRelayTest is DssTest {
 
         vm.expectEmit(true, true, true, true);
         emit SentMessageEVM(
-            /* action */            uint8(GovernanceAction.EVM_CALL),
+            /* action */            uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
             /* originCaller */      bytes32(uint256(uint160(address(relay)))),
             /* governedContract */  address(0x555),
             /* callData */          abi.encodeCall(L2GovernanceRelay.relay, (address(0x666), "789")),
