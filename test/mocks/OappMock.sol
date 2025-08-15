@@ -86,6 +86,7 @@ contract OappMock {
         MessagingFee calldata _fee,
         address _refundAddress
     ) external payable /* onlyValidCaller */ returns (MessagingReceipt memory receipt) {
+        receipt; // avoid complication warning
 
         require(msg.value == _fee.nativeFee, "OappMock/NotEnoughNative");
         if (_fee.lzTokenFee > 0) lzToken.transferFrom(msg.sender, address(this), _fee.lzTokenFee); // transfer here instead of the endpoint
@@ -119,6 +120,7 @@ contract OappMock {
         MessagingFee calldata _fee,
         address _refundAddress
     ) external payable /* onlyValidCaller */ returns (MessagingReceipt memory receipt) {
+        receipt; // avoid complication warning
 
         require(msg.value == _fee.nativeFee, "OappMock/NotEnoughNative");
         if (_fee.lzTokenFee > 0) lzToken.transferFrom(msg.sender, address(this), _fee.lzTokenFee); // transfer here instead of the endpoint
