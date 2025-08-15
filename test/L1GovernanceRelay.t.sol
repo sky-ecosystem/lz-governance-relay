@@ -128,29 +128,29 @@ contract L1GovernanceRelayTest is DssTest {
         assertEq(lzToken.balanceOf(address(relay)), 0);
     }
 
-    function testRelayEvmWithSentEth() public {
-        vm.deal(address(this), 1 ether);
-
-        vm.expectEmit(true, true, true, true);
-        emit SentMessageEVM(
-            /* action */            uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
-            /* originCaller */      bytes32(uint256(uint160(address(relay)))),
-            /* governedContract */  address(callee), // address(0x555),
-            /* callData */          abi.encodeCall(L2GovernanceRelay.relay, (address(0x666), "789")),
-            /* dstEid */            5,
-            /* extraOptions */      "1234",
-            /* nativeFee */         1 ether,
-            /* lzTokenFee */        0,
-            /* refundAddress */     address(0x444)
-        );
-        vm.expectEmit(true, true, true, true);
-        emit Relay(address(0x666), "789");
-        relay.relayEVM{value: 1 ether}({
+    function _checkRelayEvm(uint256 sendValue, uint256 nativeFee, uint256 lzTokenFee, bool expectSuccess) internal {
+        if (expectSuccess) {
+            vm.expectEmit(true, true, true, true);
+            emit SentMessageEVM(
+                /* action */            uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
+                /* originCaller */      bytes32(uint256(uint160(address(relay)))),
+                /* governedContract */  address(callee), // address(0x555),
+                /* callData */          abi.encodeCall(L2GovernanceRelay.relay, (address(0x666), "789")),
+                /* dstEid */            5,
+                /* extraOptions */      "1234",
+                /* nativeFee */         nativeFee,
+                /* lzTokenFee */        lzTokenFee,
+                /* refundAddress */     address(0x444)
+            );
+            vm.expectEmit(true, true, true, true);
+            emit Relay(address(0x666), "789");
+        }
+        relay.relayEVM{value: sendValue}({
             dstEid            : 5,
             extraOptions      : "1234",
             fee : MessagingFee({
-                nativeFee  : 1 ether,
-                lzTokenFee : 0
+                nativeFee  : nativeFee,
+                lzTokenFee : lzTokenFee
             }),
             refundAddress     : address(0x444),
             l2GovernanceRelay : address(callee), //address(0x555),
@@ -159,231 +159,91 @@ contract L1GovernanceRelayTest is DssTest {
         });
     }
 
+    function testRelayEvmWithSentEth() public {
+        vm.deal(address(this), 1 ether);
+        _checkRelayEvm({ sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
+    }
+
     function testRelayEvmWithExistingEth() public {
         vm.deal(address(relay), 1 ether);
-
-        vm.expectEmit(true, true, true, true);
-        emit SentMessageEVM(
-            /* action */            uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
-            /* originCaller */      bytes32(uint256(uint160(address(relay)))),
-            /* governedContract */  address(0x555),
-            /* callData */          abi.encodeCall(L2GovernanceRelay.relay, (address(0x666), "789")),
-            /* dstEid */            5,
-            /* extraOptions */      "1234",
-            /* nativeFee */         1 ether,
-            /* lzTokenFee */        0,
-            /* refundAddress */     address(0x444)
-        );
-        relay.relayEVM{value: 0}({
-            dstEid            : 5,
-            extraOptions      : "1234",
-            fee : MessagingFee({
-                nativeFee  : 1 ether,
-                lzTokenFee : 0
-            }),
-            refundAddress     : address(0x444),
-            l2GovernanceRelay : address(0x555),
-            target            : address(0x666),
-            targetData        : "789"
-        });
+        _checkRelayEvm({ sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
     }
 
     function testRelayEvmNotEnoughEth() public {
         vm.deal(address(relay), 1 ether / 2);
-
         vm.expectRevert();
-        relay.relayEVM{value: 0}({
-            dstEid         : 5,
-            extraOptions   : "1234",
-            fee : MessagingFee({
-                nativeFee  : 1 ether,
-                lzTokenFee : 0
-            }),
-            refundAddress     : address(0x444),
-            l2GovernanceRelay : address(0x555),
-            target            : address(0x666),
-            targetData        : "789"
-        });
+        _checkRelayEvm({ sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: false });
     }
 
     function testRelayEvmWithLzToken() public {
         deal(address(lzToken), address(relay), 2 ether);
-
-        vm.expectEmit(true, true, true, true);
-        emit SentMessageEVM(
-            /* action */            uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
-            /* originCaller */      bytes32(uint256(uint160(address(relay)))),
-            /* governedContract */  address(0x555),
-            /* callData */          abi.encodeCall(L2GovernanceRelay.relay, (address(0x666), "789")),
-            /* dstEid */            5,
-            /* extraOptions */      "1234",
-            /* nativeFee */         0,
-            /* lzTokenFee */        2 ether,
-            /* refundAddress */     address(0x444)
-        );
-        relay.relayEVM{value: 0}({
-            dstEid            : 5,
-            extraOptions      : "1234",
-            fee : MessagingFee({
-                nativeFee  : 0,
-                lzTokenFee : 2 ether
-            }),
-            refundAddress     : address(0x444),
-            l2GovernanceRelay : address(0x555),
-            target            : address(0x666),
-            targetData        : "789"
-        });
+        _checkRelayEvm({ sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: true });
     }
 
     function testRelayEvmWithNotEnoughToken() public {
         deal(address(lzToken), address(relay), 1 ether);
-
         vm.expectRevert("Gem/insufficient-balance");
-        relay.relayEVM{value: 0}({
-            dstEid            : 5,
-            extraOptions      : "1234",
-            fee : MessagingFee({
-                nativeFee  : 0,
-                lzTokenFee : 2 ether
-            }),
-            refundAddress     : address(0x444),
-            l2GovernanceRelay : address(0x555),
-            target            : address(0x666),
-            targetData        : "789"
-        });
+        _checkRelayEvm({ sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: false });
     }
 
     function testRelayEvmZeroFee() public {
         vm.expectRevert("L1GovernanceRelay/zero-fee");
-        relay.relayEVM{value: 0}({
-            dstEid            : 0,
-            extraOptions      : "",
+        _checkRelayEvm({ sendValue: 0, nativeFee: 0, lzTokenFee: 0, expectSuccess: false });
+    }
+
+    function _checkRelayRawBytes(uint256 sendValue, uint256 nativeFee, uint256 lzTokenFee, bool expectSuccess) internal {
+        if (expectSuccess) {
+            vm.expectEmit(true, true, true, true);
+            emit SentMessageRaw(
+                /* message */           "message",
+                /* dstEid */            5,
+                /* extraOptions */      "1234",
+                /* nativeFee */         nativeFee,
+                /* lzTokenFee */        lzTokenFee,
+                /* refundAddress */     address(0x444)
+            );
+        }
+        relay.relayRawBytes{value: sendValue}({
+            dstEid       : 5,
+            extraOptions : "1234",
             fee : MessagingFee({
-                nativeFee  : 0,
-                lzTokenFee : 0
+                nativeFee  : nativeFee,
+                lzTokenFee : lzTokenFee
             }),
-            refundAddress     : address(0),
-            l2GovernanceRelay : address(0),
-            target            : address(0),
-            targetData        : ""
+            refundAddress : address(0x444),
+            message       : "message"
         });
     }
 
     function testRelayRawBytesWithSentEth() public {
         vm.deal(address(this), 1 ether);
-
-        vm.expectEmit(true, true, true, true);
-        emit SentMessageRaw(
-            /* message */           "message",
-            /* dstEid */            5,
-            /* extraOptions */      "1234",
-            /* nativeFee */         1 ether,
-            /* lzTokenFee */        0,
-            /* refundAddress */     address(0x444)
-        );
-        relay.relayRawBytes{value: 1 ether}({
-            dstEid       : 5,
-            extraOptions : "1234",
-            fee : MessagingFee({
-                nativeFee  : 1 ether,
-                lzTokenFee : 0
-            }),
-            refundAddress : address(0x444),
-            message       : "message"
-        });
+        _checkRelayRawBytes({ sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
     }
 
     function testRelayRawBytesWithExistingEth() public {
         vm.deal(address(relay), 1 ether);
-
-        vm.expectEmit(true, true, true, true);
-        emit SentMessageRaw(
-            /* message */           "message",
-            /* dstEid */            5,
-            /* extraOptions */      "1234",
-            /* nativeFee */         1 ether,
-            /* lzTokenFee */        0,
-            /* refundAddress */     address(0x444)
-        );
-        relay.relayRawBytes{value: 0}({
-            dstEid       : 5,
-            extraOptions : "1234",
-            fee : MessagingFee({
-                nativeFee  : 1 ether,
-                lzTokenFee : 0
-            }),
-            refundAddress : address(0x444),
-            message       : "message"
-        });
+        _checkRelayRawBytes({ sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
     }
 
     function testRelayRawBytesWithNotEnoughEth() public {
         vm.deal(address(relay), 1 ether / 2);
-
         vm.expectRevert();
-        relay.relayRawBytes{value: 0}({
-            dstEid       : 5,
-            extraOptions : "1234",
-            fee : MessagingFee({
-                nativeFee  : 1 ether,
-                lzTokenFee : 0
-            }),
-            refundAddress : address(0x444),
-            message       : "message"
-        });
+        _checkRelayRawBytes({ sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: false });
     }
 
     function testRelayRawBytesWithLzToken() public {
         deal(address(lzToken), address(relay), 2 ether);
-
-        vm.expectEmit(true, true, true, true);
-        emit SentMessageRaw(
-            /* message */           "message",
-            /* dstEid */            5,
-            /* extraOptions */      "1234",
-            /* nativeFee */         0,
-            /* lzTokenFee */        2 ether,
-            /* refundAddress */     address(0x444)
-        );
-        relay.relayRawBytes{value: 0}({
-            dstEid       : 5,
-            extraOptions : "1234",
-            fee : MessagingFee({
-                nativeFee :  0,
-                lzTokenFee : 2 ether
-            }),
-            refundAddress : address(0x444),
-            message       : "message"
-        });
+        _checkRelayRawBytes({ sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: true });
     }
 
     function testRelayRawBytesWithNotEnoughToken() public {
         deal(address(lzToken), address(relay), 1 ether);
-
         vm.expectRevert("Gem/insufficient-balance");
-        relay.relayRawBytes{value: 0}({
-            dstEid       : 5,
-            extraOptions : "1234",
-            fee : MessagingFee({
-                nativeFee :  0,
-                lzTokenFee : 2 ether
-            }),
-            refundAddress : address(0x444),
-            message       : "message"
-        });
+        _checkRelayRawBytes({ sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: false });
     }
 
     function testRelayRawBytesZeroFee() public {
         vm.expectRevert("L1GovernanceRelay/zero-fee");
-        relay.relayRawBytes{value: 0}({
-            dstEid       : 0,
-            extraOptions : "",
-            fee : MessagingFee({
-                nativeFee :  0,
-                lzTokenFee : 0
-            }),
-            refundAddress : address(0),
-            message       : ""
-        });
+        _checkRelayRawBytes({ sendValue: 0, nativeFee: 0, lzTokenFee: 0, expectSuccess: false });
     }
 }

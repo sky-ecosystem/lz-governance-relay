@@ -47,10 +47,6 @@ contract OappMock {
     GemMock public lzToken;
     GovernanceOrigin public messageOrigin;
 
-    constructor(address _lzToken) {
-        lzToken = GemMock(_lzToken);
-    }
-
     event SentMessageEVM(
         uint8 action,
         bytes32 originCaller,
@@ -72,6 +68,17 @@ contract OappMock {
         address refundAddress
     );
 
+    constructor(address _lzToken) {
+        lzToken = GemMock(_lzToken);
+    }
+
+    function setMessageOrigin(uint32 _eid, bytes32 _caller) external {
+        messageOrigin = GovernanceOrigin({
+        eid: _eid,
+        caller: _caller
+        });
+    }
+
     function sendEVMAction(
         GovernanceMessage calldata _message,
         uint32 _dstEid,
@@ -81,10 +88,10 @@ contract OappMock {
     ) external payable /* onlyValidCaller */ returns (MessagingReceipt memory receipt) {
 
         require(msg.value == _fee.nativeFee, "OappMock/NotEnoughNative");
-        if (_fee.lzTokenFee > 0) lzToken.transferFrom(msg.sender, address(this), _fee.lzTokenFee);
+        if (_fee.lzTokenFee > 0) lzToken.transferFrom(msg.sender, address(this), _fee.lzTokenFee); // transfer here instead of the endpoint
 
         emit SentMessageEVM(
-            _message.action, // logging only the first field
+            _message.action,
             _message.originCaller,
             _message.governedContract,
             _message.callData,
@@ -95,8 +102,8 @@ contract OappMock {
             _refundAddress
         );
 
-        // Note that this should actually happen on the receiving chain, but added here for testing purposes
-        (bool success, bytes memory returnData) = _message.governedContract.call{value: 0}(_message.callData);
+        // This should actually happen on the receiving chain, but added here for testing purposes
+        (bool success, bytes memory returnData) = _message.governedContract.call{value: 0}(_message.callData); // assume value is 0
         if (!success) {
             if (returnData.length == 0) revert("OappMock/length-error");
             assembly ("memory-safe") {
@@ -114,7 +121,7 @@ contract OappMock {
     ) external payable /* onlyValidCaller */ returns (MessagingReceipt memory receipt) {
 
         require(msg.value == _fee.nativeFee, "OappMock/NotEnoughNative");
-        if (_fee.lzTokenFee > 0) lzToken.transferFrom(msg.sender, address(this), _fee.lzTokenFee);
+        if (_fee.lzTokenFee > 0) lzToken.transferFrom(msg.sender, address(this), _fee.lzTokenFee); // transfer here instead of the endpoint
 
         emit SentMessageRaw(
             _message,
@@ -124,12 +131,5 @@ contract OappMock {
             _fee.lzTokenFee,
             _refundAddress
         );
-    }
-
-    function setMessageOrigin(uint32 _eid, bytes32 _caller) external {
-        messageOrigin = GovernanceOrigin({
-            eid: _eid,
-            caller: _caller
-        });
     }
 }
