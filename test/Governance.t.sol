@@ -15,7 +15,7 @@ import { TestHelperOz5WithRevertAssertions } from "lib/sky-oapp-oft/test/foundry
 import { L1GovernanceRelay } from "src/L1GovernanceRelay.sol";
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
 
-contract GovernanceControllerOAppTest is TestHelperOz5WithRevertAssertions {
+contract GovernanceTest is TestHelperOz5WithRevertAssertions {
     using OptionsBuilder for bytes;
 
     uint32 aEid = 1;
