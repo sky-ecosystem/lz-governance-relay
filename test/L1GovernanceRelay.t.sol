@@ -19,8 +19,11 @@ pragma solidity ^0.8.21;
 
 import "dss-test/DssTest.sol";
 
-import { L1GovernanceRelay, MessagingFee, GovernanceControllerLike } from "src/L1GovernanceRelay.sol";
+import { L1GovernanceRelay, MessagingFee, GovernanceControllerLike, GovernanceAction } from "src/L1GovernanceRelay.sol";
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
+import { GovernanceControllerOApp } from "lib/sky-oapp-oft/contracts/GovernanceControllerOApp.sol";
+
+
 import { OappMock } from "test/mocks/OappMock.sol";
 import { GemMock } from "test/mocks/GemMock.sol";
 
@@ -132,9 +135,9 @@ contract L1GovernanceRelayTest is DssTest {
         if (expectSuccess) {
             vm.expectEmit(true, true, true, true);
             emit SentMessageEVM(
-                /* action */            uint8(GovernanceControllerLike.GovernanceAction.EVM_CALL),
+                /* action */            uint8(GovernanceAction.EVM_CALL),
                 /* originCaller */      bytes32(uint256(uint160(address(relay)))),
-                /* governedContract */  address(callee), // address(0x555),
+                /* governedContract */  address(callee),
                 /* callData */          abi.encodeCall(L2GovernanceRelay.relay, (address(0x666), "789")),
                 /* dstEid */            5,
                 /* extraOptions */      "1234",

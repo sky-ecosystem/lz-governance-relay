@@ -17,16 +17,13 @@
 
 pragma solidity ^0.8.21;
 
-// https://github.com/sky-ecosystem/sky-oapp-oft/blob/08e5065815a9b7ecff62656aed3fb843b4cf387f/contracts/IGovernanceController.sol#L4
-interface GovernanceControllerLike {
-    function messageOrigin() external view returns (uint32 eid, bytes32 caller);
-}
+import { IGovernanceController } from "lib/sky-oapp-oft/contracts/IGovernanceController.sol";
 
 contract L2GovernanceRelay {
     // --- storage variables ---
 
     mapping(address => uint256) public wards;
-    GovernanceControllerLike    public l2Oapp;
+    IGovernanceController       public l2Oapp;
     address                     public l1GovernanceRelay;
 
     // --- immutables ---
@@ -79,7 +76,7 @@ contract L2GovernanceRelay {
     }
 
     function file(bytes32 what, address data) external auth {
-        if      (what == "l2Oapp")            l2Oapp            = GovernanceControllerLike(data);
+        if      (what == "l2Oapp")            l2Oapp            = IGovernanceController(data);
         else if (what == "l1GovernanceRelay") l1GovernanceRelay = data;
         else revert("L2GovernanceRelay/file-unrecognized-param");
         emit File(what, data);

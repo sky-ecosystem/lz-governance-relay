@@ -74,8 +74,8 @@ contract OappMock {
 
     function setMessageOrigin(uint32 _eid, bytes32 _caller) external {
         messageOrigin = GovernanceOrigin({
-        eid: _eid,
-        caller: _caller
+            eid: _eid,
+            caller: _caller
         });
     }
 
