@@ -35,29 +35,35 @@ contract L2GovernanceRelayTest is DssTest {
     address spell;
 
     function setUp() public {
-        relay = new L2GovernanceRelay(1);
         l2Oapp = address(new OappMock(address(0)));
         spell = address(new L2SpellMock());
-
-        relay.file("l2Oapp", l2Oapp);
-        relay.file("l1GovernanceRelay", l1GovernanceRelay);
+        relay = new L2GovernanceRelay(1, l2Oapp, l1GovernanceRelay);
     }
 
     function testConstructor() public {
-        vm.expectEmit(true, true, true, true);
-        emit Rely(address(this));
-        L2GovernanceRelay r = new L2GovernanceRelay(123);
-
+        L2GovernanceRelay r = new L2GovernanceRelay(123, address(0x1), address(0x2));
         assertEq(r.l1Eid(), 123);
-        assertEq(r.wards(address(this)), 1);
-    }
-
-    function testAuth() public {
-        checkAuth(address(relay), "L2GovernanceRelay");
+        assertEq(address(r.l2Oapp()), address(0x1));
+        assertEq(r.l1GovernanceRelay(), address(0x2));
     }
 
     function testFile() public {
-        checkFileAddress(address(relay), "L2GovernanceRelay", ["l2Oapp", "l1GovernanceRelay"]);
+        vm.expectRevert("L2GovernanceRelay/sender-not-this");
+        relay.file("l2Oapp", address(0x1));
+        vm.expectEmit(true, true, true, true);
+        emit File("l2Oapp", address(0x1));
+        vm.prank(address(relay)); relay.file("l2Oapp", address(0x1));
+        assertEq(address(relay.l2Oapp()), address(0x1));
+
+        vm.expectRevert("L2GovernanceRelay/sender-not-this");
+        relay.file("l1GovernanceRelay", address(0x2));
+        vm.expectEmit(true, true, true, true);
+        emit File("l1GovernanceRelay", address(0x2));
+        vm.prank(address(relay)); relay.file("l1GovernanceRelay", address(0x2));
+        assertEq(relay.l1GovernanceRelay(), address(0x2));
+
+        vm.expectRevert("L2GovernanceRelay/file-unrecognized-param");
+        vm.prank(address(relay)); relay.file("bad", address(0x1));
     }
 
     function testRelay() public {

@@ -22,7 +22,6 @@ import { IGovernanceController } from "lib/sky-oapp-oft/contracts/IGovernanceCon
 contract L2GovernanceRelay {
     // --- storage variables ---
 
-    mapping(address => uint256) public wards;
     IGovernanceController       public l2Oapp;
     address                     public l1GovernanceRelay;
 
@@ -32,16 +31,9 @@ contract L2GovernanceRelay {
 
     // --- events ---
 
-    event Rely(address indexed usr);
-    event Deny(address indexed usr);
     event File(bytes32 indexed what, address data);
 
     // --- modifiers ---
-
-    modifier auth() {
-        require(wards[msg.sender] == 1, "L2GovernanceRelay/not-authorized");
-        _;
-    }
 
     modifier messageAuth() {
         (uint32 originEid, bytes32 originCaller) = l2Oapp.messageOrigin();
@@ -56,26 +48,17 @@ contract L2GovernanceRelay {
 
     // --- constructor ---
 
-    constructor(uint32 _l1Eid) {
-        l1Eid = _l1Eid;
-
-        wards[msg.sender] = 1;
-        emit Rely(msg.sender);
+    constructor(uint32 _l1Eid, address _l2Oapp, address _l1GovernanceRelay) {
+        l1Eid             = _l1Eid;
+        l2Oapp            = IGovernanceController(_l2Oapp);
+        l1GovernanceRelay = _l1GovernanceRelay;
     }
 
     // --- administration ---
 
-    function rely(address usr) external auth {
-        wards[usr] = 1;
-        emit Rely(usr);
-    }
-
-    function deny(address usr) external auth {
-        wards[usr] = 0;
-        emit Deny(usr);
-    }
-
-    function file(bytes32 what, address data) external auth {
+    // This is not a standard `file` function, do not copy elsewhere.
+    function file(bytes32 what, address data) external {
+        require(msg.sender == address(this), "L2GovernanceRelay/sender-not-this");
         if      (what == "l2Oapp")            l2Oapp            = IGovernanceController(data);
         else if (what == "l1GovernanceRelay") l1GovernanceRelay = data;
         else revert("L2GovernanceRelay/file-unrecognized-param");
