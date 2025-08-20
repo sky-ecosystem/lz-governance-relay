@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.22;
 
 import { GovernanceMessageEVMCodec as EVMCodec } from "lib/sky-oapp-oft/contracts/GovernanceMessageEVMCodec.sol";
 import { MessagingFee } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
