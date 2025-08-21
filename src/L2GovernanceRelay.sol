@@ -22,8 +22,8 @@ import { IGovernanceController } from "lib/sky-oapp-oft/contracts/IGovernanceCon
 contract L2GovernanceRelay {
     // --- storage variables ---
 
-    IGovernanceController       public l2Oapp;
-    address                     public l1GovernanceRelay;
+    IGovernanceController public l2Oapp;
+    address               public l1GovernanceRelay;
 
     // --- immutables ---
 
