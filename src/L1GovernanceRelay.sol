@@ -18,7 +18,7 @@
 pragma solidity ^0.8.22;
 
 import { GovernanceMessageEVMCodec as EVMCodec } from "lib/sky-oapp-oft/contracts/GovernanceMessageEVMCodec.sol";
-import { MessagingFee } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
+import { MessagingFee } from "lib/sky-oapp-oft/contracts/GovernanceControllerOApp.sol";
 import { GovernanceAction } from "lib/sky-oapp-oft/contracts/IGovernanceController.sol";
 
 // Note: we assume that if used, the LZ token is examined to be standard and revert on failure
