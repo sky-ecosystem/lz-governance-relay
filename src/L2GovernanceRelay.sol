@@ -17,13 +17,13 @@
 
 pragma solidity ^0.8.22;
 
-import { IGovernanceController } from "lib/sky-oapp-oft/contracts/IGovernanceController.sol";
+import { IGovernanceOAppReceiver, MessageOrigin } from "lib/sky-oapp-oft/contracts/interfaces/IGovernanceOAppReceiver.sol";
 
 contract L2GovernanceRelay {
     // --- storage variables ---
 
-    IGovernanceController public l2Oapp;
-    address               public l1GovernanceRelay;
+    IGovernanceOAppReceiver public l2Oapp;
+    address                 public l1GovernanceRelay;
 
     // --- immutables ---
 
@@ -36,11 +36,11 @@ contract L2GovernanceRelay {
     // --- modifiers ---
 
     modifier messageAuth() {
-        (uint32 originEid, bytes32 originCaller) = l2Oapp.messageOrigin();
+        MessageOrigin memory messageOrigin = l2Oapp.messageOrigin();
         require(
-            msg.sender                              == address(l2Oapp) &&
-            originEid                               == l1Eid &&
-            address(uint160(uint256(originCaller))) == l1GovernanceRelay,
+            msg.sender                                         == address(l2Oapp) &&
+            messageOrigin.srcEid                               == l1Eid &&
+            address(uint160(uint256(messageOrigin.srcSender))) == l1GovernanceRelay,
             "L2GovernanceRelay/bad-message-auth"
         );
         _;
@@ -48,18 +48,20 @@ contract L2GovernanceRelay {
 
     // --- constructor ---
 
+    // Initial setting are passed on construction to allow self-configuration
     constructor(uint32 _l1Eid, address _l2Oapp, address _l1GovernanceRelay) {
         l1Eid             = _l1Eid;
-        l2Oapp            = IGovernanceController(_l2Oapp);
+        l2Oapp            = IGovernanceOAppReceiver(_l2Oapp);
         l1GovernanceRelay = _l1GovernanceRelay;
     }
 
     // --- administration ---
 
     // This is not a standard `file` function, do not copy elsewhere.
+    // Use caution when changing parameters, as a wrong value can brick remote governance.
     function file(bytes32 what, address data) external {
         require(msg.sender == address(this), "L2GovernanceRelay/sender-not-this");
-        if      (what == "l2Oapp")            l2Oapp            = IGovernanceController(data);
+        if      (what == "l2Oapp")            l2Oapp            = IGovernanceOAppReceiver(data);
         else if (what == "l1GovernanceRelay") l1GovernanceRelay = data;
         else revert("L2GovernanceRelay/file-unrecognized-param");
         emit File(what, data);

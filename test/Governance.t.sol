@@ -3,15 +3,11 @@
 pragma solidity ^0.8.22;
 
 import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
-import { MessagingFee } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
-
-import { GovernanceControllerOApp } from "lib/sky-oapp-oft/contracts/GovernanceControllerOApp.sol";
-import { GovernanceMessageEVMCodec } from "lib/sky-oapp-oft/contracts/GovernanceMessageEVMCodec.sol";
-import { GovernanceAction } from "lib/sky-oapp-oft/contracts/IGovernanceController.sol";
+import { GovernanceOAppSender, TxParams, MessagingFee } from "lib/sky-oapp-oft/contracts/GovernanceOAppSender.sol";
+import { GovernanceOAppReceiver } from "lib/sky-oapp-oft/contracts/GovernanceOAppReceiver.sol";
 import { MockControlledContract } from "lib/sky-oapp-oft/test/mocks/MockControlledContract.sol";
 import { MockSpell } from "lib/sky-oapp-oft/test/mocks/MockSpell.sol";
 import { TestHelperOz5WithRevertAssertions } from "lib/sky-oapp-oft/test/foundry/helpers/TestHelperOz5WithRevertAssertions.sol";
-
 import { L1GovernanceRelay } from "src/L1GovernanceRelay.sol";
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
 
@@ -21,8 +17,8 @@ interface FileLike {
 
 contract FileSpell {
     function cast() public {
-        FileLike(address(this)).file("l2Oapp", address(0x55));
-        FileLike(address(this)).file("l1GovernanceRelay", address(0x66));
+        FileLike(address(this)).file("l2Oapp", address(0x11));
+        FileLike(address(this)).file("l1GovernanceRelay", address(0x22));
     }
 }
 
@@ -32,10 +28,10 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
     uint32 aEid = 1;
     uint32 bEid = 2;
 
-    GovernanceControllerOApp aGov;
-    GovernanceControllerOApp bGov;
-    L1GovernanceRelay        aRelay;
-    L2GovernanceRelay        bRelay;
+    GovernanceOAppSender   aGov;
+    GovernanceOAppReceiver bGov;
+    L1GovernanceRelay      aRelay;
+    L2GovernanceRelay      bRelay;
 
     MockControlledContract aControlledContract;
     MockControlledContract bControlledContract;
@@ -47,22 +43,16 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
         // Setup function to initialize 2 Mock Endpoints with Mock MessageLib.
         setUpEndpoints(2, LibraryType.UltraLightNode);
 
-        aGov = new GovernanceControllerOApp({
-            _endpoint                           : endpoints[aEid],
-            _delegate                           : address(this),
-            _addInitialValidTarget              : false,
-            _initialValidTargetSrcEid           : 0,
-            _initialValidTargetOriginCaller     : bytes32(0),
-            _initialValidTargetGovernedContract : address(0)
+        aGov = new GovernanceOAppSender({
+            _endpoint : endpoints[aEid],
+            _owner    : address(this)
         });
 
-        bGov = new GovernanceControllerOApp({
-            _endpoint                           : endpoints[bEid],
-            _delegate                           : address(this),
-            _addInitialValidTarget              : false,
-            _initialValidTargetSrcEid           : 0,
-            _initialValidTargetOriginCaller     : bytes32(0),
-            _initialValidTargetGovernedContract : address(0)
+        bGov = new GovernanceOAppReceiver({
+            _governanceOAppSenderEid     : aEid,
+            _governanceOAppSenderAddress : addressToBytes32(address(aGov)),
+            _endpoint                    : endpoints[bEid],
+            _owner                       : address(this)
         });
 
         aGov.setPeer(bEid, addressToBytes32(address(bGov)));
@@ -76,8 +66,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
         aControlledContract = new MockControlledContract(address(aRelay));
         bControlledContract = new MockControlledContract(address(bRelay));
 
-        aGov.addValidCaller(address(aRelay));
-        bGov.addValidTarget(aEid, addressToBytes32(address(aRelay)), address(bRelay));
+        aGov.setCanCallTarget(address(aRelay), bEid, addressToBytes32(address(bRelay)), true);
     }
 
     function testRelayEvm() public {
@@ -89,24 +78,24 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
 
         MockSpell spell = new MockSpell(bControlledContract);
 
-        GovernanceMessageEVMCodec.GovernanceMessage memory message = GovernanceMessageEVMCodec.GovernanceMessage({
-            action           : uint8(GovernanceAction.EVM_CALL),
-            originCaller     : addressToBytes32(address(aRelay)),
-            governedContract : address(bRelay),
-            callData         : abi.encodeWithSelector(bRelay.relay.selector, address(spell), abi.encodeWithSelector(spell.cast.selector))
+        TxParams memory txParams = TxParams({
+            dstEid       : bEid,
+            dstTarget    : addressToBytes32(address(bRelay)),
+            dstCallData  : abi.encodeWithSelector(bRelay.relay.selector, address(spell), abi.encodeWithSelector(spell.cast.selector)),
+            extraOptions : OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0)
         });
-        MessagingFee memory fee = aGov.quoteEVMAction(message, bEid, options, false);
+        MessagingFee memory fee = aGov.quoteTx(txParams, false);
 
         vm.deal(address(aRelay), fee.nativeFee);
 
         aRelay.relayEVM({
             dstEid            : bEid,
-            extraOptions      : options,
-            fee               : fee,
-            refundAddress     : address(this),
             l2GovernanceRelay : address(bRelay),
             target            : address(spell),
-            targetData        : abi.encodeWithSelector(spell.cast.selector)
+            targetData        : abi.encodeWithSelector(spell.cast.selector),
+            extraOptions      : options,
+            fee               : fee,
+            refundAddress     : address(this)
         });
 
         // Asserting that the receiving OApps have NOT had data manipulated.
@@ -119,47 +108,9 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
         assertEq(bControlledContract.data(), "test message", "lzReceive data assertion failure");
     }
 
-    function testRelayRawBytes() public {
-        string memory dataBefore = bControlledContract.data();
-
-        // Generates 1 lzReceive execution option via the OptionsBuilder library.
-        // Estimating message gas fees via the quote function.
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
-
-        MockSpell spell = new MockSpell(bControlledContract);
-
-        GovernanceMessageEVMCodec.GovernanceMessage memory message = GovernanceMessageEVMCodec.GovernanceMessage({
-            action           : uint8(GovernanceAction.EVM_CALL),
-            originCaller     : addressToBytes32(address(aRelay)),
-            governedContract : address(bRelay),
-            callData         : abi.encodeWithSelector(bRelay.relay.selector, address(spell), abi.encodeWithSelector(spell.cast.selector))
-        });
-        bytes memory messageBytes = GovernanceMessageEVMCodec.encode(message);
-        MessagingFee memory fee = aGov.quoteRawBytesAction(messageBytes, bEid, options, false);
-
-        vm.deal(address(aRelay), fee.nativeFee);
-
-        aRelay.relayRawBytes({
-            dstEid        : bEid,
-            extraOptions  : options,
-            fee           : fee,
-            refundAddress : address(this),
-            message       : messageBytes
-        });
-
-        // Asserting that the receiving OApps have NOT had data manipulated.
-        assertEq(bControlledContract.data(), dataBefore, "shouldn't be changed until lzReceive packet is verified");
-
-        // Deliver packet to bGov manually.
-        verifyAndExecutePackets(bEid, addressToBytes32(address(bGov)));
-
-        // Asserting that the data variable has updated in the receiving OApp.
-        assertEq(bControlledContract.data(), "test message", "lzReceive data assertion failure");
-    }
-
-    function testFile() public {
-        assertNotEq(address(bRelay.l2Oapp()), address(0x55));
-        assertNotEq(bRelay.l1GovernanceRelay(), address(0x66));
+    function testFileSpell() public {
+        assertNotEq(address(bRelay.l2Oapp()), address(0x11));
+        assertNotEq(bRelay.l1GovernanceRelay(), address(0x22));
 
         // Generates 1 lzReceive execution option via the OptionsBuilder library.
         // Estimating message gas fees via the quote function.
@@ -167,30 +118,30 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
 
         FileSpell spell = new FileSpell();
 
-        GovernanceMessageEVMCodec.GovernanceMessage memory message = GovernanceMessageEVMCodec.GovernanceMessage({
-            action           : uint8(GovernanceAction.EVM_CALL),
-            originCaller     : addressToBytes32(address(aRelay)),
-            governedContract : address(bRelay),
-            callData         : abi.encodeWithSelector(bRelay.relay.selector, address(spell), abi.encodeWithSelector(spell.cast.selector))
+        TxParams memory txParams = TxParams({
+            dstEid       : bEid,
+            dstTarget    : addressToBytes32(address(bRelay)),
+            dstCallData  : abi.encodeWithSelector(bRelay.relay.selector, address(spell), abi.encodeWithSelector(spell.cast.selector)),
+            extraOptions : OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0)
         });
-        MessagingFee memory fee = aGov.quoteEVMAction(message, bEid, options, false);
+        MessagingFee memory fee = aGov.quoteTx(txParams, false);
 
         vm.deal(address(aRelay), fee.nativeFee);
 
         aRelay.relayEVM({
             dstEid            : bEid,
-            extraOptions      : options,
-            fee               : fee,
-            refundAddress     : address(this),
             l2GovernanceRelay : address(bRelay),
             target            : address(spell),
-            targetData        : abi.encodeWithSelector(spell.cast.selector)
+            targetData        : abi.encodeWithSelector(spell.cast.selector),
+            extraOptions      : options,
+            fee               : fee,
+            refundAddress     : address(this)
         });
 
         // Deliver packet to bGov manually.
         verifyAndExecutePackets(bEid, addressToBytes32(address(bGov)));
 
-        assertEq(address(bRelay.l2Oapp()), address(0x55));
-        assertEq(bRelay.l1GovernanceRelay(), address(0x66));
+        assertEq(address(bRelay.l2Oapp()), address(0x11));
+        assertEq(bRelay.l1GovernanceRelay(), address(0x22));
     }
 }

@@ -17,33 +17,12 @@
 
 pragma solidity ^0.8.22;
 
-import { GovernanceMessageEVMCodec as EVMCodec } from "lib/sky-oapp-oft/contracts/GovernanceMessageEVMCodec.sol";
-import { MessagingFee } from "lib/sky-oapp-oft/contracts/GovernanceControllerOApp.sol";
-import { GovernanceAction } from "lib/sky-oapp-oft/contracts/IGovernanceController.sol";
+import { IGovernanceOAppSender, MessagingFee, TxParams } from "lib/sky-oapp-oft/contracts/interfaces/IGovernanceOAppSender.sol";
 
 // Note: we assume that if used, the LZ token is examined to be standard and revert on failure
 interface TokenLike {
     function approve(address spender, uint256 amount) external;
     function transfer(address recipient, uint256 amount) external;
-}
-
-// lib/sky-oapp-oft/contracts/GovernanceControllerOApp.sol
-interface GovernanceControllerLike {
-    function sendEVMAction(
-        EVMCodec.GovernanceMessage calldata _message,
-        uint32                     _dstEid,
-        bytes calldata             _extraOptions,
-        MessagingFee calldata      _fee,
-        address                    _refundAddress
-    ) external payable;
-
-    function sendRawBytesAction(
-        bytes calldata        _message,
-        uint32                _dstEid,
-        bytes calldata        _extraOptions,
-        MessagingFee calldata _fee,
-        address               _refundAddress
-    ) external payable;
 }
 
 interface L2GovernanceRelayLike {
@@ -55,7 +34,7 @@ contract L1GovernanceRelay {
 
     mapping(address => uint256) public wards;
     TokenLike                   public lzToken;
-    GovernanceControllerLike    public l1Oapp;
+    IGovernanceOAppSender       public l1Oapp;
 
     // --- events ---
 
@@ -91,7 +70,7 @@ contract L1GovernanceRelay {
 
     function file(bytes32 what, address data) external auth {
         if      (what == "lzToken") lzToken = TokenLike(data);
-        else if (what == "l1Oapp")  l1Oapp  = GovernanceControllerLike(data);
+        else if (what == "l1Oapp")  l1Oapp  = IGovernanceOAppSender(data);
         else revert("L1GovernanceRelay/file-unrecognized-param");
         emit File(what, data);
     }
@@ -109,46 +88,31 @@ contract L1GovernanceRelay {
         lzToken.transfer(receiver, amount);
     }
 
-    // It is not likely that lzTokenFee is used, but if so, governance is assumed to monitor LZ for token changes.
+    // It is not likely that lzTokenFee is used, support is added here just for completeness.
+    // In case it is used, governance is assumed to monitor LZ for token changes.
     // If deemed needed, this includes a check in the spell itself and fallback code.
     // Note that just reading the token from the endpoint might pose a security risk if the token is malicious.
-    // The above is relevant also to relayRawBytes.
     function relayEVM(
         uint32                dstEid,
-        bytes calldata        extraOptions,
-        MessagingFee calldata fee,
-        address               refundAddress,
         address               l2GovernanceRelay,
         address               target,
-        bytes calldata        targetData
+        bytes calldata        targetData,
+        bytes calldata        extraOptions,
+        MessagingFee calldata fee,
+        address               refundAddress
     ) external payable auth {
-        EVMCodec.GovernanceMessage memory message = EVMCodec.GovernanceMessage({
-            action           : uint8(GovernanceAction.EVM_CALL),
-            originCaller     : bytes32(uint256(uint160(address(this)))),
-            governedContract : l2GovernanceRelay,
-            callData         : abi.encodeCall(L2GovernanceRelayLike.relay, (target, targetData))
+        TxParams memory txParams = TxParams({
+            dstEid       : dstEid,
+            dstTarget    : bytes32(uint256(uint160(address(l2GovernanceRelay)))),
+            dstCallData  : abi.encodeCall(L2GovernanceRelayLike.relay, (target, targetData)),
+            extraOptions : extraOptions
         });
 
         if (fee.nativeFee > 0) {
-            l1Oapp.sendEVMAction{value: fee.nativeFee}(message, dstEid, extraOptions, fee, refundAddress);
+            l1Oapp.sendTx{value: fee.nativeFee}(txParams, fee, refundAddress);
         } else if (fee.lzTokenFee > 0) {
             lzToken.approve(address(l1Oapp), fee.lzTokenFee);
-            l1Oapp.sendEVMAction(message, dstEid, extraOptions, fee, refundAddress);
-        } else revert("L1GovernanceRelay/zero-fee");
-    }
-
-    function relayRawBytes(
-        uint32                dstEid,
-        bytes calldata        extraOptions,
-        MessagingFee calldata fee,
-        address               refundAddress,
-        bytes calldata        message
-    ) external payable auth {
-        if (fee.nativeFee > 0) {
-            l1Oapp.sendRawBytesAction{value: fee.nativeFee}(message, dstEid, extraOptions, fee, refundAddress);
-        } else if (fee.lzTokenFee > 0) {
-            lzToken.approve(address(l1Oapp), fee.lzTokenFee);
-            l1Oapp.sendRawBytesAction(message, dstEid, extraOptions, fee, refundAddress);
+            l1Oapp.sendTx(txParams, fee, refundAddress);
         } else revert("L1GovernanceRelay/zero-fee");
     }
 }
