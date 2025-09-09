@@ -94,6 +94,7 @@ contract L1GovernanceRelay {
     // Note that just reading the token from the endpoint might pose a security risk if the token is malicious.
     // Also assuming that the send library is configured implicitly, so any default behavior is not relied on (as can change).
     // Also assuming that if authed to multiple senders, they are trusted not to steal/waste eth/tokens from each other.
+    // (dstEid, l2GovernanceRelay) is assumed to be whitelisted in the l1 Oapp for this src sender.
     function relayEVM(
         uint32                dstEid,
         address               l2GovernanceRelay,
