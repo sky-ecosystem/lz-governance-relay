@@ -69,6 +69,7 @@ contract L2GovernanceRelay {
 
     // --- relay ---
 
+    // Not expected/needed to get eth, hence not payable.
     function relay(address target, bytes calldata targetData) external messageAuth {
         (bool success, bytes memory result) = target.delegatecall(targetData);
         if (!success) {
