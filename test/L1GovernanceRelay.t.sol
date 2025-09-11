@@ -106,6 +106,12 @@ contract L1GovernanceRelayTest is DssTest {
         assertEq(address(relay).balance, 0);
     }
 
+    function testReclaimFailedToSendEther() public {
+        vm.deal(address(relay), 1 ether);
+        vm.expectRevert("L1GovernanceRelay/failed-to-send-ether");
+        relay.reclaim(address(0x123), 2 ether);
+    }
+
     function testReclaimLzToken() public {
         uint256 initialReceiverBalance = lzToken.balanceOf(address(0x123));
         lzToken.transfer(address(relay), 1 ether);
