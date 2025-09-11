@@ -42,7 +42,7 @@ contract OappSenderMock {
         MessagingFee calldata _fee,
         address _refundAddress
     ) external payable returns (MessagingReceipt memory receipt) {
-        receipt; // avoid complication warning
+        receipt; // avoid compilation warning
 
         require(msg.value == _fee.nativeFee, "OappMock/NotEnoughNative");
         if (_fee.lzTokenFee > 0) lzToken.transferFrom(msg.sender, address(this), _fee.lzTokenFee); // transfer here instead of the endpoint
