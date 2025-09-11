@@ -111,11 +111,7 @@ contract L1GovernanceRelay {
             extraOptions : extraOptions
         });
 
-        if (fee.nativeFee > 0) {
-            l1Oapp.sendTx{value: fee.nativeFee}(txParams, fee, refundAddress);
-        } else if (fee.lzTokenFee > 0) {
-            lzToken.approve(address(l1Oapp), fee.lzTokenFee);
-            l1Oapp.sendTx(txParams, fee, refundAddress);
-        } else revert("L1GovernanceRelay/zero-fee");
+        if (fee.lzTokenFee > 0) lzToken.approve(address(l1Oapp), fee.lzTokenFee);
+        l1Oapp.sendTx{value: fee.nativeFee}(txParams, fee, refundAddress);
     }
 }

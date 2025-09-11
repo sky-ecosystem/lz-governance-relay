@@ -172,8 +172,9 @@ contract L1GovernanceRelayTest is DssTest {
         _checkRelayEvm({ sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: false });
     }
 
-    function testRelayEvmZeroFee() public {
-        vm.expectRevert("L1GovernanceRelay/zero-fee");
-        _checkRelayEvm({ sendValue: 0, nativeFee: 0, lzTokenFee: 0, expectSuccess: false });
+    function testRelayBothFees() public {
+        vm.deal(address(this), 1 ether);
+        deal(address(lzToken), address(relay), 1 ether);
+        _checkRelayEvm({ sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 1 ether, expectSuccess: true });
     }
 }
