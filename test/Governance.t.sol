@@ -82,7 +82,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
             dstEid       : bEid,
             dstTarget    : addressToBytes32(address(bRelay)),
             dstCallData  : abi.encodeWithSelector(bRelay.relay.selector, address(spell), abi.encodeWithSelector(spell.cast.selector)),
-            extraOptions : OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0)
+            extraOptions : options
         });
         MessagingFee memory fee = aGov.quoteTx(txParams, false);
 
@@ -100,6 +100,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
 
         // Asserting that the receiving OApps have NOT had data manipulated.
         assertEq(bControlledContract.data(), dataBefore, "shouldn't be changed until lzReceive packet is verified");
+        assertNotEq(bControlledContract.data(), "test message", "shouldn't be equal to expected result");
 
         // Deliver packet to bGov manually.
         verifyAndExecutePackets(bEid, addressToBytes32(address(bGov)));
