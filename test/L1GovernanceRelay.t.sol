@@ -20,6 +20,8 @@ pragma solidity ^0.8.22;
 import "dss-test/DssTest.sol";
 
 import { L1GovernanceRelay, MessagingFee, IGovernanceOAppSender } from "src/L1GovernanceRelay.sol";
+import { GovernanceRelayDeploy } from "deploy/GovernanceRelayDeploy.sol";
+import { GovernanceRelayInit } from "deploy/GovernanceRelayInit.sol";
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
 import { OappSenderMock } from "test/mocks/OappSenderMock.sol";
 import { GemMock } from "test/mocks/GemMock.sol";
@@ -35,6 +37,8 @@ contract Callee {
 }
 
 contract L1GovernanceRelayTest is DssTest {
+    DssInstance dss;
+    address pauseProxy;
     L1GovernanceRelay relay;
     address l2GovRelay = address(0x111);
     address l1Oapp;
@@ -54,13 +58,22 @@ contract L1GovernanceRelayTest is DssTest {
     event Relay(address target, bytes targetData);
 
     function setUp() public {
-        relay = new L1GovernanceRelay();
+        vm.createSelectFork(vm.envString("ETH_RPC_URL"));
+
+        dss = MCD.loadFromChainlog(0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F);
+        pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
+
+        relay = L1GovernanceRelay(GovernanceRelayDeploy.deployL1(address(this), pauseProxy));
         lzToken = new GemMock(100 ether);
         l1Oapp = address(new OappSenderMock(address(lzToken)));
         callee = new Callee();
 
+        vm.startPrank(pauseProxy);
+        GovernanceRelayInit.init(dss, address(relay), address(l1Oapp));
         relay.file("lzToken", address(lzToken));
-        relay.file("l1Oapp", l1Oapp);
+        vm.stopPrank();
+
+        assertEq(dss.chainlog.getAddress("LZ_GOV_RELAY"), address(relay));
     }
 
     function testConstructor() public {
@@ -80,27 +93,28 @@ contract L1GovernanceRelayTest is DssTest {
     }
 
     function testAuthModifiers() public virtual {
-        relay.deny(address(this));
-
+        vm.startPrank(address(0xBEEF));
         checkModifier(address(relay), string(abi.encodePacked("L1GovernanceRelay", "/not-authorized")), [
             relay.reclaim.selector,
             relay.reclaimLzToken.selector,
             relay.relayEVM.selector
         ]);
+        vm.stopPrank();
     }
 
     function testReceive() public {
+        uint256 relayBalanceBefore = address(relay).balance;
         vm.deal(address(this), 1 ether);
         (bool sent, ) = address(relay).call{value: 1 ether}("");
         assertEq(sent, true);
-        assertEq(address(relay).balance, 1 ether);
+        assertEq(address(relay).balance, relayBalanceBefore + 1 ether);
     }
 
     function testReclaim() public {
         uint256 initialReceiverBalance = address(0x123).balance;
         vm.deal(address(relay), 1 ether);
 
-        relay.reclaim(address(0x123), 1 ether);
+        vm.prank(pauseProxy); relay.reclaim(address(0x123), 1 ether);
 
         assertEq(address(0x123).balance, initialReceiverBalance + 1 ether);
         assertEq(address(relay).balance, 0);
@@ -109,14 +123,14 @@ contract L1GovernanceRelayTest is DssTest {
     function testReclaimFailedToSendEther() public {
         vm.deal(address(relay), 1 ether);
         vm.expectRevert("L1GovernanceRelay/failed-to-send-ether");
-        relay.reclaim(address(0x123), 2 ether);
+        vm.prank(pauseProxy); relay.reclaim(address(0x123), 2 ether);
     }
 
     function testReclaimLzToken() public {
         uint256 initialReceiverBalance = lzToken.balanceOf(address(0x123));
         lzToken.transfer(address(relay), 1 ether);
 
-        relay.reclaimLzToken(address(0x123), 1 ether);
+        vm.prank(pauseProxy); relay.reclaimLzToken(address(0x123), 1 ether);
 
         assertEq(lzToken.balanceOf(address(0x123)), initialReceiverBalance + 1 ether);
         assertEq(lzToken.balanceOf(address(relay)), 0);
@@ -137,7 +151,7 @@ contract L1GovernanceRelayTest is DssTest {
             vm.expectEmit(true, true, true, true);
             emit Relay(address(0x333), "789");
         }
-        relay.relayEVM{value: sendValue}({
+        vm.prank(pauseProxy); relay.relayEVM{value: sendValue}({
             dstEid            : 5,
             extraOptions      : "1234",
             fee : MessagingFee({
@@ -152,7 +166,7 @@ contract L1GovernanceRelayTest is DssTest {
     }
 
     function testRelayEvmWithSentEth() public {
-        vm.deal(address(this), 1 ether);
+        vm.deal(address(pauseProxy), 1 ether);
         _checkRelayEvm({ sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
     }
 
@@ -179,7 +193,7 @@ contract L1GovernanceRelayTest is DssTest {
     }
 
     function testRelayBothFees() public {
-        vm.deal(address(this), 1 ether);
+        vm.deal(address(pauseProxy), 1 ether);
         deal(address(lzToken), address(relay), 1 ether);
         _checkRelayEvm({ sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 1 ether, expectSuccess: true });
     }

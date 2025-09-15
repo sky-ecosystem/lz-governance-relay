@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.22;
 
+import "dss-test/DssTest.sol";
+
 import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 import { GovernanceOAppSender, TxParams, MessagingFee } from "lib/sky-oapp-oft/contracts/GovernanceOAppSender.sol";
 import { GovernanceOAppReceiver } from "lib/sky-oapp-oft/contracts/GovernanceOAppReceiver.sol";
@@ -10,10 +12,8 @@ import { MockSpell } from "lib/sky-oapp-oft/test/mocks/MockSpell.sol";
 import { TestHelperOz5WithRevertAssertions } from "lib/sky-oapp-oft/test/foundry/helpers/TestHelperOz5WithRevertAssertions.sol";
 import { L1GovernanceRelay } from "src/L1GovernanceRelay.sol";
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
-
-interface FileLike {
-    function file(bytes32 what, address data) external;
-}
+import { GovernanceRelayDeploy } from "deploy/GovernanceRelayDeploy.sol";
+import { GovernanceRelayInit } from "deploy/GovernanceRelayInit.sol";
 
 contract FileSpell {
     function cast() public {
@@ -22,12 +22,15 @@ contract FileSpell {
     }
 }
 
-contract GovernanceTest is TestHelperOz5WithRevertAssertions {
+contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
     using OptionsBuilder for bytes;
+
+    DssInstance dss;
 
     uint32 aEid = 1;
     uint32 bEid = 2;
 
+    address                pauseProxy;
     GovernanceOAppSender   aGov;
     GovernanceOAppReceiver bGov;
     L1GovernanceRelay      aRelay;
@@ -38,7 +41,12 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
 
     /// @notice Calls setUp from TestHelper and initializes contract instances for testing.
     function setUp() public virtual override {
+        vm.createSelectFork(vm.envString("ETH_RPC_URL"));
+
         super.setUp();
+
+        dss = MCD.loadFromChainlog(0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F);
+        pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
 
         // Setup function to initialize 2 Mock Endpoints with Mock MessageLib.
         setUpEndpoints(2, LibraryType.UltraLightNode);
@@ -58,10 +66,12 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
         aGov.setPeer(bEid, addressToBytes32(address(bGov)));
         bGov.setPeer(aEid, addressToBytes32(address(aGov)));
 
-        aRelay = new L1GovernanceRelay();
-        aRelay.file("l1Oapp", address(aGov));
+        aRelay = L1GovernanceRelay(GovernanceRelayDeploy.deployL1(address(this), pauseProxy));
+        vm.startPrank(pauseProxy);
+        GovernanceRelayInit.init(dss, address(aRelay), address(aGov));
+        vm.stopPrank();
 
-        bRelay = new L2GovernanceRelay(aEid, address(bGov), address(aRelay) );
+        bRelay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(aEid, address(bGov), address(aRelay)));
 
         aControlledContract = new MockControlledContract(address(aRelay));
         bControlledContract = new MockControlledContract(address(bRelay));
@@ -88,7 +98,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
 
         vm.deal(address(aRelay), fee.nativeFee);
 
-        aRelay.relayEVM({
+        vm.prank(pauseProxy); aRelay.relayEVM({
             dstEid            : bEid,
             l2GovernanceRelay : address(bRelay),
             target            : address(spell),
@@ -129,7 +139,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions {
 
         vm.deal(address(aRelay), fee.nativeFee);
 
-        aRelay.relayEVM({
+        vm.prank(pauseProxy); aRelay.relayEVM({
             dstEid            : bEid,
             l2GovernanceRelay : address(bRelay),
             target            : address(spell),

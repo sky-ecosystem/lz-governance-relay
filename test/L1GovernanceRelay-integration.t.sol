@@ -20,6 +20,8 @@ pragma solidity ^0.8.22;
 import "dss-test/DssTest.sol";
 
 import { L1GovernanceRelay, MessagingFee } from "src/L1GovernanceRelay.sol";
+import { GovernanceRelayDeploy } from "deploy/GovernanceRelayDeploy.sol";
+import { GovernanceRelayInit } from "deploy/GovernanceRelayInit.sol";
 import { GovernanceOAppSender } from "lib/sky-oapp-oft/contracts/GovernanceOAppSender.sol";
 import { IOAppCore } from "@layerzerolabs/oapp-evm/contracts/oapp/interfaces/IOAppCore.sol";
 import { IOAppOptionsType3, EnforcedOptionParam } from "@layerzerolabs/oapp-evm/contracts/oapp/interfaces/IOAppOptionsType3.sol";
@@ -41,10 +43,9 @@ interface GemLike {
 contract L1GovernanceRelayIntegrationTest is DssTest {
     using OptionsBuilder for bytes;
 
+    DssInstance dss;
     L1GovernanceRelay relay;
     address pauseProxy;
-
-    ChainlogLike constant chainlog = ChainlogLike(0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F);
 
     address constant ETH_LZ_ENDPOINT          = 0x1a44076050125825900e736c501f859c50fE728c;
     address constant LZ_MAINNET_EXECUTOR      = 0x173272739Bd7Aa6e4e214714048a9fE699453059;
@@ -58,19 +59,16 @@ contract L1GovernanceRelayIntegrationTest is DssTest {
     function setUp() public {
         vm.createSelectFork(vm.envString("ETH_RPC_URL"));
 
-        pauseProxy = chainlog.getAddress("MCD_PAUSE_PROXY");
+        dss = MCD.loadFromChainlog(0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F);
+        pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
 
-        relay = new L1GovernanceRelay();
-        relay.rely(pauseProxy);
-        relay.deny(address(this));
-
+        relay = L1GovernanceRelay(GovernanceRelayDeploy.deployL1(address(this), pauseProxy));
         GovernanceOAppSender l1Oapp = new GovernanceOAppSender(ETH_LZ_ENDPOINT, pauseProxy);
 
         vm.startPrank(pauseProxy);
 
-        relay.file("l1Oapp", address(l1Oapp));
+        GovernanceRelayInit.init(dss, address(relay), address(l1Oapp));
         l1Oapp.setCanCallTarget(address(relay), AVAX_EID, bytes32(uint256(uint160(address(0x111)))), true);
-
         IOAppCore(address(l1Oapp)).setPeer(AVAX_EID, bytes32("peer"));
 
         ExecutorConfig memory execCfg = ExecutorConfig({

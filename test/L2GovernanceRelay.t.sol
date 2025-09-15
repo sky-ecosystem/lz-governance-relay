@@ -20,6 +20,7 @@ pragma solidity ^0.8.22;
 import "dss-test/DssTest.sol";
 
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
+import { GovernanceRelayDeploy } from "deploy/GovernanceRelayDeploy.sol";
 import { OappReceiverMock } from "test/mocks/OappReceiverMock.sol";
 
 contract L2SpellMock {
@@ -36,7 +37,7 @@ contract L2GovernanceRelayTest is DssTest {
     function setUp() public {
         l2Oapp = address(new OappReceiverMock());
         spell = address(new L2SpellMock());
-        relay = new L2GovernanceRelay(1, l2Oapp, l1GovernanceRelay);
+        relay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(1, l2Oapp, l1GovernanceRelay));
     }
 
     function testConstructor() public {
