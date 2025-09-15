@@ -32,7 +32,7 @@ library GovernanceRelayDeploy {
         ScriptTools.switchOwner(l1GovernanceRelay, deployer, owner);
     }
 
-    // We assume ad L2 spell is not mandatory. Spell teams are assumed to review the deployment and do sanity checks.
+    // We assume an L2 spell is not mandatory. Spell teams are assumed to review the deployment and do sanity checks.
     function deployL2(
         uint32 l1Eid,
         address l2Oapp,
