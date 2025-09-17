@@ -19,7 +19,7 @@ pragma solidity ^0.8.22;
 
 import "dss-test/DssTest.sol";
 
-import { L1GovernanceRelay, MessagingFee, IGovernanceOAppSender } from "src/L1GovernanceRelay.sol";
+import { L1GovernanceRelay, MessagingFee } from "src/L1GovernanceRelay.sol";
 import { GovernanceRelayDeploy } from "deploy/GovernanceRelayDeploy.sol";
 import { GovernanceRelayInit } from "deploy/GovernanceRelayInit.sol";
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
