@@ -91,7 +91,7 @@ contract L1GovernanceRelay {
     // It is not likely that lzTokenFee is used, support is added here just for completeness.
     // In case it is used, governance is assumed to monitor LZ for token changes.
     // If deemed needed, this includes a check in the spell itself and fallback code.
-    // Also assuming that the send library is configured implicitly, so any default behavior is not relied on (as can change).
+    // Also assuming that the send library is configured explicitly, so any default behavior is not relied on (as can change).
     // Also assuming that if authed to multiple senders, they are trusted not to steal/waste eth/tokens from each other.
     // (dstEid, l2GovernanceRelay) is assumed to be whitelisted in the l1 Oapp for this src sender.
     function relayEVM(
