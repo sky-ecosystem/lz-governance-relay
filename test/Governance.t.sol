@@ -88,7 +88,6 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
 
         bRelay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(aEid, address(bGov), address(aRelay)));
 
-        aControlledContract = new MockControlledContract(address(aRelay));
         bControlledContract = new MockControlledContract(address(bRelay));
 
         aGov.setCanCallTarget(address(aRelay), bEid, addressToBytes32(address(bRelay)), true);
