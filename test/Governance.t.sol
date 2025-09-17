@@ -51,7 +51,6 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
     L1GovernanceRelay      aRelay;
     L2GovernanceRelay      bRelay;
 
-    MockControlledContract aControlledContract;
     MockControlledContract bControlledContract;
 
     /// @notice Calls setUp from TestHelper and initializes contract instances for testing.
