@@ -19,7 +19,7 @@ pragma solidity ^0.8.22;
 
 import "dss-test/DssTest.sol";
 
-import { L1GovernanceRelay, MessagingFee } from "src/L1GovernanceRelay.sol";
+import { L1GovernanceRelay, MessagingFee, TxParams } from "src/L1GovernanceRelay.sol";
 import { GovernanceRelayDeploy } from "deploy/GovernanceRelayDeploy.sol";
 import { GovernanceRelayInit } from "deploy/GovernanceRelayInit.sol";
 import { GovernanceOAppSender } from "lib/sky-oapp-oft/contracts/GovernanceOAppSender.sol";
@@ -115,6 +115,27 @@ contract L1GovernanceRelayIntegrationTest is DssTest {
                 lzTokenFee : 0
             }),
             refundAddress     : address(0x222)
+        });
+    }
+
+    function testRelayRawWithSentEth() public {
+        vm.deal(address(relay), 1 ether);
+
+        vm.expectEmit(false, false, false, false); // Just make sure the packet was sent
+        emit PacketSent("", "", address(0));
+        vm.prank(pauseProxy);
+        relay.relayRaw({
+            txParams : TxParams({
+                dstEid       : AVAX_EID,
+                dstTarget    : bytes32(uint256(uint160(address(0x111)))),
+                dstCallData  : abi.encodeWithSelector(bytes4(0), address(0x333), ""),
+                extraOptions : ""
+            }),
+            fee : MessagingFee({
+                nativeFee  : 1 ether,
+                lzTokenFee : 0
+            }),
+            refundAddress : address(0x222)
         });
     }
 }

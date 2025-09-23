@@ -88,12 +88,14 @@ contract L1GovernanceRelay {
         lzToken.transfer(receiver, amount);
     }
 
+    // Notes:
     // It is not likely that lzTokenFee is used, support is added here just for completeness.
     // In case it is used, governance is assumed to monitor LZ for token changes.
     // If deemed needed, this includes a check in the spell itself and fallback code.
     // Also assuming that the send library is configured explicitly, so any default behavior is not relied on (as can change).
     // Also assuming that if authed to multiple senders, they are trusted not to steal/waste eth/tokens from each other.
-    // (dstEid, l2GovernanceRelay) is assumed to be whitelisted in the l1 Oapp for this src sender.
+    // (dstEid, dstTarget) is assumed to be whitelisted in the l1 Oapp for this src sender.
+
     function relayEVM(
         uint32                dstEid,
         address               l2GovernanceRelay,
@@ -109,7 +111,22 @@ contract L1GovernanceRelay {
             dstCallData  : abi.encodeCall(L2GovernanceRelayLike.relay, (target, targetData)),
             extraOptions : extraOptions
         });
+        _send(txParams, fee, refundAddress);
+    }
 
+    function relayRaw(
+        TxParams calldata     txParams,
+        MessagingFee calldata fee,
+        address               refundAddress
+    ) external payable auth {
+        _send(txParams, fee, refundAddress);
+    }
+
+    function _send(
+        TxParams memory       txParams,
+        MessagingFee calldata fee,
+        address               refundAddress
+    ) internal {
         if (fee.lzTokenFee > 0) lzToken.approve(address(l1Oapp), fee.lzTokenFee);
         l1Oapp.sendTx{value: fee.nativeFee}(txParams, fee, refundAddress);
     }

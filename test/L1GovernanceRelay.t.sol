@@ -19,7 +19,7 @@ pragma solidity ^0.8.22;
 
 import "dss-test/DssTest.sol";
 
-import { L1GovernanceRelay, MessagingFee } from "src/L1GovernanceRelay.sol";
+import { L1GovernanceRelay, MessagingFee, TxParams } from "src/L1GovernanceRelay.sol";
 import { GovernanceRelayDeploy } from "deploy/GovernanceRelayDeploy.sol";
 import { GovernanceRelayInit } from "deploy/GovernanceRelayInit.sol";
 import { L2GovernanceRelay } from "src/L2GovernanceRelay.sol";
@@ -97,7 +97,8 @@ contract L1GovernanceRelayTest is DssTest {
         checkModifier(address(relay), string(abi.encodePacked("L1GovernanceRelay", "/not-authorized")), [
             relay.reclaim.selector,
             relay.reclaimLzToken.selector,
-            relay.relayEVM.selector
+            relay.relayEVM.selector,
+            relay.relayRaw.selector
         ]);
         vm.stopPrank();
     }
@@ -136,7 +137,7 @@ contract L1GovernanceRelayTest is DssTest {
         assertEq(lzToken.balanceOf(address(relay)), 0);
     }
 
-    function _checkRelayEvm(uint256 sendValue, uint256 nativeFee, uint256 lzTokenFee, bool expectSuccess) internal {
+    function _checkRelay(bool isRelayEvm, uint256 sendValue, uint256 nativeFee, uint256 lzTokenFee, bool expectSuccess) internal {
         if (expectSuccess) {
             vm.expectEmit(true, true, true, true);
             emit SentMessageEVM(
@@ -151,50 +152,100 @@ contract L1GovernanceRelayTest is DssTest {
             vm.expectEmit(true, true, true, true);
             emit Relay(address(0x333), "789");
         }
-        vm.prank(pauseProxy); relay.relayEVM{value: sendValue}({
-            dstEid            : 5,
-            extraOptions      : "1234",
-            fee : MessagingFee({
-                nativeFee  : nativeFee,
-                lzTokenFee : lzTokenFee
-            }),
-            refundAddress     : address(0x222),
-            l2GovernanceRelay : address(callee),
-            target            : address(0x333),
-            targetData        : "789"
-        });
+        vm.prank(pauseProxy);
+        if (isRelayEvm) {
+            relay.relayEVM{value: sendValue}({
+                dstEid            : 5,
+                extraOptions      : "1234",
+                fee : MessagingFee({
+                    nativeFee  : nativeFee,
+                    lzTokenFee : lzTokenFee
+                }),
+                refundAddress     : address(0x222),
+                l2GovernanceRelay : address(callee),
+                target            : address(0x333),
+                targetData        : "789"
+            });
+        } else {
+            relay.relayRaw{value: sendValue}({
+                txParams : TxParams({
+                    dstEid            : 5,
+                    dstTarget         : bytes32(uint256(uint160(address(callee)))),
+                    dstCallData       : abi.encodeCall(Callee.relay, (address(0x333), "789")),
+                    extraOptions      : "1234"
+                }),
+                fee : MessagingFee({
+                    nativeFee  : nativeFee,
+                    lzTokenFee : lzTokenFee
+                }),
+                refundAddress : address(0x222)
+            });
+        }
     }
 
     function testRelayEvmWithSentEth() public {
         vm.deal(address(pauseProxy), 1 ether);
-        _checkRelayEvm({ sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
+        _checkRelay({ isRelayEvm: true, sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
+    }
+
+    function testRelayRawWithSentEth() public {
+        vm.deal(address(pauseProxy), 1 ether);
+        _checkRelay({ isRelayEvm: false, sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
     }
 
     function testRelayEvmWithExistingEth() public {
         vm.deal(address(relay), 1 ether);
-        _checkRelayEvm({ sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
+        _checkRelay({ isRelayEvm: true, sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
     }
 
+    function testRelayRawWithExistingEth() public {
+        vm.deal(address(relay), 1 ether);
+        _checkRelay({ isRelayEvm: false, sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: true });
+    }
+    
     function testRelayEvmNotEnoughEth() public {
         vm.deal(address(relay), 1 ether / 2);
         vm.expectRevert();
-        _checkRelayEvm({ sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: false });
+        _checkRelay({ isRelayEvm: true, sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: false });
     }
 
+    function testRelayRawNotEnoughEth() public {
+        vm.deal(address(relay), 1 ether / 2);
+        vm.expectRevert();
+        _checkRelay({ isRelayEvm: false, sendValue: 0, nativeFee: 1 ether, lzTokenFee: 0, expectSuccess: false });
+    }
+    
     function testRelayEvmWithLzToken() public {
         deal(address(lzToken), address(relay), 2 ether);
-        _checkRelayEvm({ sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: true });
+        _checkRelay({ isRelayEvm: true, sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: true });
+    }
+
+    function testRelayRawWithLzToken() public {
+        deal(address(lzToken), address(relay), 2 ether);
+        _checkRelay({ isRelayEvm: false, sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: true });
     }
 
     function testRelayEvmWithNotEnoughToken() public {
         deal(address(lzToken), address(relay), 1 ether);
         vm.expectRevert("Gem/insufficient-balance");
-        _checkRelayEvm({ sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: false });
+        _checkRelay({ isRelayEvm: true, sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: false });
     }
 
-    function testRelayBothFees() public {
+    function testRelayRawWithNotEnoughToken() public {
+        deal(address(lzToken), address(relay), 1 ether);
+        vm.expectRevert("Gem/insufficient-balance");
+        _checkRelay({ isRelayEvm: false, sendValue: 0, nativeFee: 0, lzTokenFee: 2 ether, expectSuccess: false });
+    }
+    
+    function testRelayEvmBothFees() public {
         vm.deal(address(pauseProxy), 1 ether);
         deal(address(lzToken), address(relay), 1 ether);
-        _checkRelayEvm({ sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 1 ether, expectSuccess: true });
+        _checkRelay({ isRelayEvm: true, sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 1 ether, expectSuccess: true });
+    }
+
+    function testRelayRawBothFees() public {
+        vm.deal(address(pauseProxy), 1 ether);
+        deal(address(lzToken), address(relay), 1 ether);
+        _checkRelay({ isRelayEvm: false, sendValue: 1 ether, nativeFee: 1 ether, lzTokenFee: 1 ether, expectSuccess: true });
     }
 }
