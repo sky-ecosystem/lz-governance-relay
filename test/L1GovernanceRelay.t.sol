@@ -156,15 +156,15 @@ contract L1GovernanceRelayTest is DssTest {
         if (isRelayEvm) {
             relay.relayEVM{value: sendValue}({
                 dstEid            : 5,
+                l2GovernanceRelay : address(callee),
+                target            : address(0x333),
+                targetData        : "789",
                 extraOptions      : "1234",
                 fee : MessagingFee({
                     nativeFee  : nativeFee,
                     lzTokenFee : lzTokenFee
                 }),
-                refundAddress     : address(0x222),
-                l2GovernanceRelay : address(callee),
-                target            : address(0x333),
-                targetData        : "789"
+                refundAddress     : address(0x222)
             });
         } else {
             relay.relayRaw{value: sendValue}({
