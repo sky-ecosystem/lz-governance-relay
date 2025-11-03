@@ -6,16 +6,19 @@ import "forge-std/Script.sol";
 import { L1GovernanceRelay, TxParams, MessagingFee } from "src/L1GovernanceRelay.sol";
 
 interface GovOappLike {
-    function setCanCallTarget(address _srcSender, uint32 _dstEid, bytes32 _dstTarget, bool _canCall) external;
+    function canCallTarget(address srcSender, uint32 dstEid, bytes32 dstTarget) external view returns (bool);
     function quoteTx(TxParams calldata _params, bool _payInLzToken) external view returns (MessagingFee memory fee);
 }
 
 contract TestScript is Script {
 
     L1GovernanceRelay constant l1GovernanceRelay = L1GovernanceRelay(payable(address(0x2beBFe397D497b66cB14461cB6ee467b4C3B7D61)));
-    GovOappLike       constant l1Oapp            = GovOappLike(address(0x0)); // TODO: fill in L1 Oapp address
+    GovOappLike       constant l1Oapp            = GovOappLike(address(0x0)); // TODO: fill in L1 Oapp address once known
 
-    bytes constant dstCallData = ""; // TODO: fill in target data
+    bytes32 constant dstTarget = 0x054a535a992921064d24e87160da387c7c35b5ddbc92bb81e41fa8404105448d; // base58 -d <<< "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" | xxd -p -c 32
+    
+    // base58 -d <<< $(solana find-program-derived-address $GOV_PROGRAM_ID string:CpiAuthority pubkey:$(solana find-program-derived-address $GOV_PROGRAM_ID string:Governance u64be:0) u32be:30168 hex:"0000000000000000000000002bebfe397d497b66cb14461cb6ee467b4c3b7d61") | xxd -p -c 32
+    bytes32 constant govRelayCpiAuthority = 0x3af15f6ca5970c7e34b827c78440f208851661d0c16fd978216a1405126729c0; // TODO: Use correct value once $GOV_PROGRAM_ID is known
 
     function run() external {
 
@@ -25,11 +28,11 @@ contract TestScript is Script {
 
         l1GovernanceRelay.file("l1Oapp", address(l1Oapp));
 
-        // TODO: make sure we can call it or this is set, since only the l1Oapp owner can do it
-        //l1Oapp.setCanCallTarget(address(l1GovernanceRelay), 30168, /* TODO addressToBytes32(address(bRelay)) */ , true);
+        // Sanity check
+        require(l1Oapp.canCallTarget(address(l1GovernanceRelay), 30168, dstTarget), "l1Oapp.canCallTarget not set");
 
-        uint128 gas = 0;   // TODO: fill in gas amount
-        uint128 value = 0; // TODO: fill in value amount
+        uint128 gas = 200_000;   // TODO: make sure this is enough
+        uint128 value = 0;
 
         // The following yields the same result as doing:
         // bytes memory extraOptions = OptionsBuilder.newOptions().addExecutorLzReceiveOption(gas, value);
@@ -42,9 +45,17 @@ contract TestScript is Script {
             value == 0 ? abi.encodePacked(gas) : abi.encodePacked(gas, value)   // ExecutorOptions.encodeLzReceiveOption(gas, value)
         );
 
+        bytes memory dstCallData = abi.encodePacked(
+            uint16(1),                       // accounts_length (big-endian u16)
+            govRelayCpiAuthority,            // account pubkey (32 bytes)
+            uint8(1),                        // is_signer:true
+            uint8(0),                        // is_writable:false
+            bytes("SkyGovTest")              // data (raw bytes of the string to log)
+        );
+
         TxParams memory txParams = TxParams({
             dstEid       : 30168,
-            dstTarget    : bytes32(""), // TODO: fill in target address
+            dstTarget    : dstTarget,
             dstCallData  : dstCallData,
             extraOptions : extraOptions
         });
@@ -52,8 +63,5 @@ contract TestScript is Script {
         MessagingFee memory fee = l1Oapp.quoteTx({ _params : txParams, _payInLzToken : false });
         l1GovernanceRelay.relayRaw(txParams, fee, deployerAddress);
 
-        // TODO: clean up:
-        //  - l1GovernanceRelay.l1Oapp
-        //  - l1Oapp mapping using setCanCallTarget
     }
 }
