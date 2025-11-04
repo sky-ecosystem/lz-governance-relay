@@ -12,11 +12,11 @@ interface GovOappLike {
 
 contract TestScript is Script {
 
-    L1GovernanceRelay constant l1GovernanceRelay = L1GovernanceRelay(payable(address(0x2beBFe397D497b66cB14461cB6ee467b4C3B7D61)));
-    GovOappLike       constant l1Oapp            = GovOappLike(address(0x0)); // TODO: fill in L1 Oapp address once known
+    L1GovernanceRelay constant l1GovernanceRelay = L1GovernanceRelay(payable(0x2beBFe397D497b66cB14461cB6ee467b4C3B7D61));
+    GovOappLike       constant l1Oapp            = GovOappLike(0x27FC1DD771817b53bE48Dc28789533BEa53C9CCA);
 
-    bytes32 constant dstTarget = 0x054a535a992921064d24e87160da387c7c35b5ddbc92bb81e41fa8404105448d; // base58 -d <<< "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" | xxd -p -c 32
-    
+    // base58 -d <<< "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" | xxd -p -c 32
+    bytes32 constant dstTarget = 0x054a535a992921064d24e87160da387c7c35b5ddbc92bb81e41fa8404105448d;
     // base58 -d <<< $(solana find-program-derived-address SKYGRikJcGSa3jC5HDyzDrVsmkCk3e5SqAurycny8PW string:CpiAuthority pubkey:$(solana find-program-derived-address SKYGRikJcGSa3jC5HDyzDrVsmkCk3e5SqAurycny8PW string:Governance u64be:0) u32be:30101 hex:"0000000000000000000000002bebfe397d497b66cb14461cb6ee467b4c3b7d61") | xxd -p -c 32
     bytes32 constant govRelayCpiAuthority = 0x8dc412529f876c9f3bc01d7c3095bcd6cd1d6d5177b59aa03f04e5c5b422147b;
 
