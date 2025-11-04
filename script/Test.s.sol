@@ -26,7 +26,7 @@ contract TestScript is Script {
 
         (,address deployerAddress, ) = vm.readCallers();
 
-        // l1GovernanceRelay.file("l1Oapp", address(l1Oapp));
+        l1GovernanceRelay.file("l1Oapp", address(l1Oapp));
 
         // Sanity check
         require(l1Oapp.canCallTarget(address(l1GovernanceRelay), 30168, dstTarget), "l1Oapp.canCallTarget not set");
