@@ -17,8 +17,8 @@ contract TestScript is Script {
 
     bytes32 constant dstTarget = 0x054a535a992921064d24e87160da387c7c35b5ddbc92bb81e41fa8404105448d; // base58 -d <<< "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" | xxd -p -c 32
     
-    // base58 -d <<< $(solana find-program-derived-address $GOV_PROGRAM_ID string:CpiAuthority pubkey:$(solana find-program-derived-address $GOV_PROGRAM_ID string:Governance u64be:0) u32be:30101 hex:"0000000000000000000000002bebfe397d497b66cb14461cb6ee467b4c3b7d61") | xxd -p -c 32
-    bytes32 constant govRelayCpiAuthority = 0x3af15f6ca5970c7e34b827c78440f208851661d0c16fd978216a1405126729c0; // TODO: Use correct value once $GOV_PROGRAM_ID is known
+    // base58 -d <<< $(solana find-program-derived-address SKYGRikJcGSa3jC5HDyzDrVsmkCk3e5SqAurycny8PW string:CpiAuthority pubkey:$(solana find-program-derived-address SKYGRikJcGSa3jC5HDyzDrVsmkCk3e5SqAurycny8PW string:Governance u64be:0) u32be:30101 hex:"0000000000000000000000002bebfe397d497b66cb14461cb6ee467b4c3b7d61") | xxd -p -c 32
+    bytes32 constant govRelayCpiAuthority = 0x8dc412529f876c9f3bc01d7c3095bcd6cd1d6d5177b59aa03f04e5c5b422147b;
 
     function run() external {
 
@@ -62,6 +62,5 @@ contract TestScript is Script {
 
         MessagingFee memory fee = l1Oapp.quoteTx({ _params : txParams, _payInLzToken : false });
         l1GovernanceRelay.relayRaw(txParams, fee, deployerAddress);
-
     }
 }
