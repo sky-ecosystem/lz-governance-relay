@@ -26,12 +26,12 @@ contract TestScript is Script {
 
         (,address deployerAddress, ) = vm.readCallers();
 
-        l1GovernanceRelay.file("l1Oapp", address(l1Oapp));
+        // l1GovernanceRelay.file("l1Oapp", address(l1Oapp));
 
         // Sanity check
         require(l1Oapp.canCallTarget(address(l1GovernanceRelay), 30168, dstTarget), "l1Oapp.canCallTarget not set");
 
-        uint128 gas = 200_000;   // TODO: make sure this is enough
+        uint128 gas = 400_000;   // 200k CU should actually be enough based on previously sent similar Memo payload, but taking some extra margin to be safe. See previous Memo call through gov oapp: https://solscan.io/tx/db8UFTz2QE3kkTABh8KMy46wJyKevyRMu8ZTTPMreRxVrqypee1oEFCPgDTRGNG25tTtF4Us2o3UuwJh8SZdk5U
         uint128 value = 0;
 
         // The following yields the same result as doing:
