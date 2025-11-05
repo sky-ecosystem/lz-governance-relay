@@ -61,7 +61,6 @@ contract TestScript is Script {
         });
 
         MessagingFee memory fee = l1Oapp.quoteTx({ _params : txParams, _payInLzToken : false });
-        payable(l1GovernanceRelay).transfer(fee.nativeFee);
-        l1GovernanceRelay.relayRaw(txParams, fee, deployerAddress);
+        l1GovernanceRelay.relayRaw{value: fee.nativeFee}(txParams, fee, deployerAddress);
     }
 }
