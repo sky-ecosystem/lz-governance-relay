@@ -97,7 +97,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
 
         // Generates 1 lzReceive execution option via the OptionsBuilder library.
         // Estimating message gas fees via the quote function.
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
 
         MockSpell spell = new MockSpell(bControlledContract);
 
@@ -125,11 +125,17 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         assertEq(bControlledContract.data(), dataBefore, "shouldn't be changed until lzReceive packet is verified");
         assertNotEq(bControlledContract.data(), "test message", "shouldn't be equal to expected result");
 
-        // Deliver packet to bGov manually.
+        // Deliver packet to bGov manually. This queues the action on bRelay but does NOT execute it.
         verifyAndExecutePackets(bEid, addressToBytes32(address(bGov)));
 
+        assertEq(bRelay.actionsCount(), 1, "action should be queued");
+        assertEq(bControlledContract.data(), dataBefore, "shouldn't be changed until bRelay.exec is called");
+
+        // Execute the queued action (delay is 0 by default, so we can exec immediately).
+        bRelay.exec(0);
+
         // Asserting that the data variable has updated in the receiving OApp.
-        assertEq(bControlledContract.data(), "test message", "lzReceive data assertion failure");
+        assertEq(bControlledContract.data(), "test message", "exec data assertion failure");
     }
 
     function testFileSpell() public {
@@ -138,7 +144,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
 
         // Generates 1 lzReceive execution option via the OptionsBuilder library.
         // Estimating message gas fees via the quote function.
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
 
         FileSpell spell = new FileSpell();
 
@@ -146,7 +152,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
             dstEid       : bEid,
             dstTarget    : addressToBytes32(address(bRelay)),
             dstCallData  : abi.encodeWithSelector(bRelay.relay.selector, address(spell), abi.encodeWithSelector(spell.cast.selector)),
-            extraOptions : OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0)
+            extraOptions : OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0)
         });
         MessagingFee memory fee = aGov.quoteTx(txParams, false);
 
@@ -162,8 +168,15 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
             refundAddress     : address(this)
         });
 
-        // Deliver packet to bGov manually.
+        // Deliver packet to bGov manually. This queues the action on bRelay but does NOT execute it.
         verifyAndExecutePackets(bEid, addressToBytes32(address(bGov)));
+
+        assertEq(bRelay.actionsCount(), 1, "action should be queued");
+        assertNotEq(address(bRelay.l2Oapp()), address(0x11));
+        assertNotEq(bRelay.l1GovernanceRelay(), address(0x22));
+
+        // Execute the queued action.
+        bRelay.exec(0);
 
         assertEq(address(bRelay.l2Oapp()), address(0x11));
         assertEq(bRelay.l1GovernanceRelay(), address(0x22));
