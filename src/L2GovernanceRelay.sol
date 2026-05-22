@@ -25,6 +25,7 @@ contract L2GovernanceRelay {
     IGovernanceOAppReceiver public l2Oapp;
     address                 public l1GovernanceRelay;
     uint256                 public actionsCount;               // Number of actions
+    uint256                 public canceledId;                 // Checkpoint Id (every action not executed until this id is canceled)
     uint256                 public delay;                      // Time between queuing and execution
     uint256                 public gracePeriod;                // Time after delay during which an action can be executed
 
@@ -36,7 +37,6 @@ contract L2GovernanceRelay {
         bytes   targetData;
         uint256 executionTime;
         bool    executed;
-        bool    canceled;
     }
 
     // --- immutables ---
@@ -51,6 +51,7 @@ contract L2GovernanceRelay {
 
     enum ActionState {
         Queued,
+        Ready,
         Executed,
         Canceled,
         Expired
@@ -64,7 +65,7 @@ contract L2GovernanceRelay {
     event File(bytes32 indexed what, uint256 data);
     event ActionQueued(uint256 indexed id, address target, bytes   targetData, uint256 executionTime);
     event ActionExecuted(uint256 indexed id, address indexed initiatorExecution, bytes returnedData);
-    event ActionCanceled(uint256 indexed id);
+    event ActionsCanceled(uint256 indexed id);
 
     // --- modifiers ---
 
@@ -134,10 +135,8 @@ contract L2GovernanceRelay {
 
     // Not expected/needed to get eth, hence not payable.
     function relay(address target, bytes calldata targetData) external messageAuth {
-        uint256 actionId      = actionsCount;
         uint256 executionTime = block.timestamp + delay;
-
-        unchecked { ++actionsCount; }
+        uint256 actionId; unchecked { actionId  = ++actionsCount; }
 
         Action storage action = _actions[actionId];
 
@@ -154,11 +153,9 @@ contract L2GovernanceRelay {
     }
 
     function exec(uint256 actionId) external {
-        require(getActionState(actionId) == ActionState.Queued, "L2GovernanceRelay/not-queued");
+        require(getActionState(actionId) == ActionState.Ready, "L2GovernanceRelay/not-ready");
 
         Action storage action = _actions[actionId];
-
-        require(block.timestamp >= action.executionTime, "L2GovernanceRelay/timelock-not-finished");
 
         action.executed = true;
 
@@ -173,13 +170,13 @@ contract L2GovernanceRelay {
         emit ActionExecuted(actionId, msg.sender, result);
     }
 
-    function cancel(uint256 actionId) external toll {
-        require(getActionState(actionId) == ActionState.Queued, "L2GovernanceRelay/not-queued");
+    function cancel(uint256 canceledId_) external toll {
+        require(canceledId_ <= actionsCount, "L2GovernanceRelay/invalid-action-id");
+        require(canceledId_ >  canceledId, "L2GovernanceRelay/already-included");
 
-        Action storage action = _actions[actionId];
-        action.canceled = true;
+        canceledId = canceledId_;
 
-        emit ActionCanceled(actionId);
+        emit ActionsCanceled(canceledId_);
     }
 
     /******************************************************************************************************************/
@@ -187,17 +184,17 @@ contract L2GovernanceRelay {
     /******************************************************************************************************************/
 
     function getActionById(uint256 actionId) external view returns (Action memory) {
+        require(actionId > 0 && actionId <= actionsCount, "L2GovernanceRelay/invalid-action-id");
         return _actions[actionId];
     }
 
     function getActionState(uint256 actionId) public view returns (ActionState) {
-        require(actionId < actionsCount, "L2GovernanceRelay/invalid-action-id");
-
+        require(actionId > 0 && actionId <= actionsCount, "L2GovernanceRelay/invalid-action-id");
         Action storage action = _actions[actionId];
-
-        if      (action.canceled) return ActionState.Canceled;
-        else if (action.executed) return ActionState.Executed;
-        else if (block.timestamp > action.executionTime + gracePeriod) return ActionState.Expired;
+        if      (action.executed) return ActionState.Executed;
+        else if (actionId <= canceledId) return ActionState.Canceled;
+        else if (block.timestamp >  action.executionTime + gracePeriod) return ActionState.Expired;
+        else if (block.timestamp >= action.executionTime) return ActionState.Ready;
         else return ActionState.Queued;
     }
 }

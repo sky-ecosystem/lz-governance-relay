@@ -50,7 +50,7 @@ contract L2GovernanceRelayTest is DssTest {
     event Diss(address indexed usr);
     event ActionQueued(uint256 indexed id, address target, bytes targetData, uint256 executionTime);
     event ActionExecuted(uint256 indexed id, address indexed initiatorExecution, bytes returnedData);
-    event ActionCanceled(uint256 indexed id);
+    event ActionsCanceled(uint256 indexed id);
 
     function setUp() public {
         l2Oapp = address(new OappReceiverMock());
@@ -68,6 +68,7 @@ contract L2GovernanceRelayTest is DssTest {
         assertEq(r.delay(), 0);
         assertEq(r.gracePeriod(), r.MINIMUM_GRACE_PERIOD());
         assertEq(r.actionsCount(), 0);
+        assertEq(r.canceledId(), 0);
     }
 
     function testFile() public {
@@ -139,17 +140,17 @@ contract L2GovernanceRelayTest is DssTest {
         uint256 executionTime = block.timestamp + relay.delay();
 
         vm.expectEmit();
-        emit ActionQueued(0, spell, data, executionTime);
+        emit ActionQueued(1, spell, data, executionTime);
         vm.prank(l2Oapp); relay.relay(spell, data);
 
         assertEq(relay.actionsCount(), 1);
-        L2GovernanceRelay.Action memory set = relay.getActionById(0);
-        assertEq(set.target, spell);
-        assertEq(set.targetData, data);
-        assertEq(set.executionTime, executionTime);
-        assertFalse(set.executed);
-        assertFalse(set.canceled);
-        assertEq(uint8(relay.getActionState(0)), uint8(L2GovernanceRelay.ActionState.Queued));
+        L2GovernanceRelay.Action memory action = relay.getActionById(1);
+        assertEq(action.target, spell);
+        assertEq(action.targetData, data);
+        assertEq(action.executionTime, executionTime);
+        assertFalse(action.executed);
+        // delay is 0 so the action is immediately Ready
+        assertEq(uint8(relay.getActionState(1)), uint8(L2GovernanceRelay.ActionState.Ready));
     }
 
     function testRelayNotFromL2Oapp() public {
@@ -172,14 +173,15 @@ contract L2GovernanceRelayTest is DssTest {
     }
 
     function _queue(address target, bytes memory data) internal returns (uint256 id) {
-        id = relay.actionsCount();
         vm.prank(l2Oapp); relay.relay(target, data);
+        id = relay.actionsCount();
     }
 
     function testExec() public {
         assertFalse(StorageMock(store).didRun());
 
         uint256 id = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+        assertEq(uint8(relay.getActionState(id)), uint8(L2GovernanceRelay.ActionState.Ready));
 
         vm.expectEmit();
         emit ActionExecuted(id, address(this), "");
@@ -194,10 +196,12 @@ contract L2GovernanceRelayTest is DssTest {
         vm.prank(address(relay)); relay.file("delay", uint256(1 days));
         uint256 id = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
 
-        vm.expectRevert("L2GovernanceRelay/timelock-not-finished");
+        assertEq(uint8(relay.getActionState(id)), uint8(L2GovernanceRelay.ActionState.Queued));
+        vm.expectRevert("L2GovernanceRelay/not-ready");
         relay.exec(id);
 
         vm.warp(block.timestamp + 1 days);
+        assertEq(uint8(relay.getActionState(id)), uint8(L2GovernanceRelay.ActionState.Ready));
         relay.exec(id);
         assertTrue(relay.getActionById(id).executed);
     }
@@ -206,7 +210,7 @@ contract L2GovernanceRelayTest is DssTest {
         uint256 id = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
         relay.exec(id);
 
-        vm.expectRevert("L2GovernanceRelay/not-queued");
+        vm.expectRevert("L2GovernanceRelay/not-ready");
         relay.exec(id);
     }
 
@@ -215,7 +219,8 @@ contract L2GovernanceRelayTest is DssTest {
         uint256 id = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
         vm.prank(bud); relay.cancel(id);
 
-        vm.expectRevert("L2GovernanceRelay/not-queued");
+        assertEq(uint8(relay.getActionState(id)), uint8(L2GovernanceRelay.ActionState.Canceled));
+        vm.expectRevert("L2GovernanceRelay/not-ready");
         relay.exec(id);
     }
 
@@ -224,13 +229,16 @@ contract L2GovernanceRelayTest is DssTest {
         vm.warp(block.timestamp + relay.gracePeriod() + 1);
 
         assertEq(uint8(relay.getActionState(id)), uint8(L2GovernanceRelay.ActionState.Expired));
-        vm.expectRevert("L2GovernanceRelay/not-queued");
+        vm.expectRevert("L2GovernanceRelay/not-ready");
         relay.exec(id);
     }
 
     function testExecInvalidId() public {
         vm.expectRevert("L2GovernanceRelay/invalid-action-id");
         relay.exec(0);
+
+        vm.expectRevert("L2GovernanceRelay/invalid-action-id");
+        relay.exec(1);
     }
 
     function testExecDelegateCallError() public {
@@ -249,14 +257,18 @@ contract L2GovernanceRelayTest is DssTest {
 
     function testCancel() public {
         vm.prank(address(relay)); relay.kiss(bud);
-        uint256 id = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+        uint256 id1 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+        uint256 id2 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+        uint256 id3 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
 
         vm.expectEmit();
-        emit ActionCanceled(id);
-        vm.prank(bud); relay.cancel(id);
+        emit ActionsCanceled(id2);
+        vm.prank(bud); relay.cancel(id2);
 
-        assertTrue(relay.getActionById(id).canceled);
-        assertEq(uint8(relay.getActionState(id)), uint8(L2GovernanceRelay.ActionState.Canceled));
+        assertEq(relay.canceledId(), id2);
+        assertEq(uint8(relay.getActionState(id1)), uint8(L2GovernanceRelay.ActionState.Canceled));
+        assertEq(uint8(relay.getActionState(id2)), uint8(L2GovernanceRelay.ActionState.Canceled));
+        assertEq(uint8(relay.getActionState(id3)), uint8(L2GovernanceRelay.ActionState.Ready));
     }
 
     function testCancelNotWhitelisted() public {
@@ -266,24 +278,43 @@ contract L2GovernanceRelayTest is DssTest {
         relay.cancel(id);
     }
 
-    function testCancelNotQueued() public {
-        vm.prank(address(relay)); relay.kiss(bud);
-        uint256 id = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
-        relay.exec(id);
-
-        vm.expectRevert("L2GovernanceRelay/not-queued");
-        vm.prank(bud); relay.cancel(id);
-    }
-
     function testCancelInvalidId() public {
         vm.prank(address(relay)); relay.kiss(bud);
+        _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
 
         vm.expectRevert("L2GovernanceRelay/invalid-action-id");
-        vm.prank(bud); relay.cancel(0);
+        vm.prank(bud); relay.cancel(2);
     }
 
-    function testgetActionStateInvalidId() public {
+    function testCancelAlreadyIncluded() public {
+        vm.prank(address(relay)); relay.kiss(bud);
+        _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+        _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+
+        vm.prank(bud); relay.cancel(2);
+
+        vm.expectRevert("L2GovernanceRelay/already-included");
+        vm.prank(bud); relay.cancel(2);
+
+        vm.expectRevert("L2GovernanceRelay/already-included");
+        vm.prank(bud); relay.cancel(1);
+    }
+
+    function testGetActionStateInvalidId() public {
         vm.expectRevert("L2GovernanceRelay/invalid-action-id");
         relay.getActionState(0);
+
+        vm.expectRevert("L2GovernanceRelay/invalid-action-id");
+        relay.getActionState(1);
+
+        _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+
+        vm.expectRevert("L2GovernanceRelay/invalid-action-id");
+        relay.getActionState(0);
+
+        relay.getActionState(1);
+
+        vm.expectRevert("L2GovernanceRelay/invalid-action-id");
+        relay.getActionState(2);
     }
 }

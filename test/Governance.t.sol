@@ -132,7 +132,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         assertEq(bControlledContract.data(), dataBefore, "shouldn't be changed until bRelay.exec is called");
 
         // Execute the queued action (delay is 0 by default, so we can exec immediately).
-        bRelay.exec(0);
+        bRelay.exec(1);
 
         // Asserting that the data variable has updated in the receiving OApp.
         assertEq(bControlledContract.data(), "test message", "exec data assertion failure");
@@ -176,7 +176,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         assertNotEq(bRelay.l1GovernanceRelay(), address(0x22));
 
         // Execute the queued action.
-        bRelay.exec(0);
+        bRelay.exec(1);
 
         assertEq(address(bRelay.l2Oapp()), address(0x11));
         assertEq(bRelay.l1GovernanceRelay(), address(0x22));
