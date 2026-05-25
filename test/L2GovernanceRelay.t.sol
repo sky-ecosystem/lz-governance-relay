@@ -68,9 +68,13 @@ contract L2GovernanceRelayTest is DssTest {
         vm.expectRevert("L2GovernanceRelay/grace-period-too-short");
         new L2GovernanceRelay(123, address(0x1), address(0x2), 2 days, minGrace - 1);
 
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit();
+        emit File("l2Oapp", address(0x1));
+        vm.expectEmit();
+        emit File("l1GovernanceRelay", address(0x2));
+        vm.expectEmit();
         emit File("delay", uint256(2 days));
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit();
         emit File("gracePeriod", uint256(2 hours));
         L2GovernanceRelay r = new L2GovernanceRelay(123, address(0x1), address(0x2), 2 days, 2 hours);
 

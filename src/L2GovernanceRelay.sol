@@ -25,12 +25,12 @@ contract L2GovernanceRelay {
     IGovernanceOAppReceiver public l2Oapp;                  // Sender address which queues actions
     address                 public l1GovernanceRelay;       // L1 counterpart of this contract (L1 sender)
     uint256                 public actionsCount;            // Number of actions ever created
-    uint256                 public canceledId;              // Cancelation checkpoint Id (every action not executed up to this id is canceled)
-    uint256                 public delay;                   // Time between queuing and execution
-    uint256                 public gracePeriod;             // Time after delay during which an action can be executed, otherwise gets expired
+    uint256                 public canceledId;              // Cancellation checkpoint Id (all unexecuted actions up to this Id are canceled)
+    uint256                 public delay;                   // The queuing time until the action is ready for execution
+    uint256                 public gracePeriod;             // The time window during which an action can be executed after becoming ready, after which it expires
 
-    mapping(uint256 => Action) private _actions;            // Map of actions created (id => Action)
-    mapping(address usr => uint256 whitelisted) public bud; // Guardians that can cancel queued proposals
+    mapping(uint256 id  => Action) private _actions;        // Mapping of actions created
+    mapping(address usr => uint256 whitelisted) public bud; // Guardians that can cancel queued actions
 
     struct Action {
         address target;
@@ -108,13 +108,15 @@ contract L2GovernanceRelay {
         delay             = delay_;
         gracePeriod       = gracePeriod_;
 
+        emit File("l2Oapp", l2Oapp_);
+        emit File("l1GovernanceRelay", l1GovernanceRelay_);
         emit File("delay", delay_);
         emit File("gracePeriod", gracePeriod_);
     }
 
     // --- administration functions ---
-
-    // These are not a standard authed `kiss`, `diss` and `file` functions, do not copy elsewhere.
+    // These are not a standard authed admin functions, do not copy elsewhere.
+    // Use caution when changing parameters, as a wrong value can brick remote governance.
 
     function kiss(address usr) external onlySelf {
         bud[usr] = 1;
@@ -128,7 +130,6 @@ contract L2GovernanceRelay {
         emit Diss(usr);
     }
 
-    // Use caution when changing parameters, as a wrong value can brick remote governance.
     function file(bytes32 what, address data) external onlySelf {
         if      (what == "l2Oapp")            l2Oapp            = IGovernanceOAppReceiver(data);
         else if (what == "l1GovernanceRelay") l1GovernanceRelay = data;
