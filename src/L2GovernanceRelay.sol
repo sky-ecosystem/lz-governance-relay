@@ -160,7 +160,7 @@ contract L2GovernanceRelay {
     function getActionState(uint256 actionId) public view returns (ActionState) {
         require(actionId > 0 && actionId <= actionsCount, "L2GovernanceRelay/invalid-action-id");
 
-        Action memory action = _actions[actionId];
+        Action storage action = _actions[actionId];
         if      (action.executed) return ActionState.Executed;
         else if (actionId <= canceledId) return ActionState.Canceled; // It is fine that expired ones could be "converted" to canceled
         else if (block.timestamp >  action.executionTime + gracePeriod) return ActionState.Expired;
@@ -189,6 +189,7 @@ contract L2GovernanceRelay {
     }
 
     function exec(uint256 actionId) external {
+        // Note: spells MUST treat msg.sender as untrusted
         require(getActionState(actionId) == ActionState.Ready, "L2GovernanceRelay/not-ready");
 
         Action storage action = _actions[actionId];
