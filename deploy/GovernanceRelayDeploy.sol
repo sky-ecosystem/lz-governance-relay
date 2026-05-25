@@ -35,8 +35,10 @@ library GovernanceRelayDeploy {
     function deployL2(
         uint32 l1Eid,
         address l2Oapp,
-        address l1GovernanceRelay
+        address l1GovernanceRelay,
+        uint256 delay,
+        uint256 gracePeriod
     ) internal returns (address l2GovernanceRelay) {
-        l2GovernanceRelay = address(new L2GovernanceRelay(l1Eid, l2Oapp, l1GovernanceRelay));
+        l2GovernanceRelay = address(new L2GovernanceRelay(l1Eid, l2Oapp, l1GovernanceRelay, delay, gracePeriod));
     }
 }

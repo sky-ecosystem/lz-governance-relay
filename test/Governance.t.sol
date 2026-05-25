@@ -51,6 +51,9 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
     L1GovernanceRelay      aRelay;
     L2GovernanceRelay      bRelay;
 
+    uint256 constant DELAY        = 1 days;
+    uint256 constant GRACE_PERIOD = 1 hours;
+
     MockControlledContract bControlledContract;
 
     /// @notice Calls setUp from TestHelper and initializes contract instances for testing.
@@ -85,7 +88,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         GovernanceRelayInit.init(dss, address(aRelay), address(aGov));
         vm.stopPrank();
 
-        bRelay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(aEid, address(bGov), address(aRelay)));
+        bRelay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(aEid, address(bGov), address(aRelay), DELAY, GRACE_PERIOD));
 
         bControlledContract = new MockControlledContract(address(bRelay));
 
@@ -131,7 +134,8 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         assertEq(bRelay.actionsCount(), 1, "action should be queued");
         assertEq(bControlledContract.data(), dataBefore, "shouldn't be changed until bRelay.exec is called");
 
-        // Execute the queued action (delay is 0 by default, so we can exec immediately).
+        // Warp past the configured delay before executing the queued action.
+        vm.warp(block.timestamp + bRelay.delay());
         bRelay.exec(1);
 
         // Asserting that the data variable has updated in the receiving OApp.
@@ -175,7 +179,8 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         assertNotEq(address(bRelay.l2Oapp()), address(0x11));
         assertNotEq(bRelay.l1GovernanceRelay(), address(0x22));
 
-        // Execute the queued action.
+        // Warp past the configured delay before executing the queued action.
+        vm.warp(block.timestamp + bRelay.delay());
         bRelay.exec(1);
 
         assertEq(address(bRelay.l2Oapp()), address(0x11));
