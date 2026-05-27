@@ -31,9 +31,9 @@ Also exposes `reclaim` / `reclaimLzToken` so leftover native/LZ-token balance ca
 
 ### `L2GovernanceRelay`
 
-Receives messages from L1 via the configured `l2Oapp` (a `GovernanceOAppReceiver`). On receipt, an action is queued; it can be executed after `delay` seconds and before `delay + gracePeriod` seconds have elapsed. Whitelisted guardians (`bud`) can veto.
+Receives messages from L1 via the configured `l2Oapp` (a `GovernanceOAppReceiver`). On receipt, an action is queued; it can be executed after `delay` seconds and within `gracePeriod` seconds after the `delay` has elapsed. Whitelisted guardians (`bud`) can veto.
 
-Self-administration: `kiss`, `diss`, and `file` are gated by `onlySelf` — they can only be invoked via `delegatecall` from a spell that was itself queued, delayed, and executed. There is no other path to mutate `l2Oapp`, `l1GovernanceRelay`, `delay`, `gracePeriod`, or the `bud` set.
+Self-administration: `kiss`, `diss`, and `file` are gated by `onlySelf` — they can only be invoked via `delegatecall` through an action that was itself queued, delayed, and executed. There is no other path to mutate `l2Oapp`, `l1GovernanceRelay`, `delay`, `gracePeriod`, or the `bud` set.
 
 #### Action lifecycle
 
@@ -61,19 +61,19 @@ relay() ─▶  Queued ─(block.timestamp ≥ executionTime)─▶  Ready ─ex
 
 `cancel(canceledId_)` advances a single monotonic checkpoint that vetoes **every** unexecuted action with `id ≤ canceledId_`. Two consequences worth understanding:
 
-- A single `bud` can mass-cancel the entire in-flight queue in one transaction. This is a trust assumption that the guardian will not misbehave..
+- A single `bud` can mass-cancel the entire in-flight queue in one transaction. This is a trust assumption that the guardian will not misbehave.
 - `cancel` works on `Ready` actions too, not only `Queued` ones.
 
 ## For spell authors
 
 Spells are run as `delegatecall` from `exec`. Two consequences:
 
-1. **`msg.sender` inside the spell is the address that called `exec`** — which is permissionless. Any EOA can trigger execution once the timelock elapses. Do **not** write spells that read `msg.sender` for trust decisions.
+1. **`msg.sender` inside the spell is the address that called `exec`** — which is permissionless. Any caller can trigger execution once the timelock elapses. Do **not** write spells that read `msg.sender` for trust decisions.
 2. Spells must always be stateless to prevent corruption of the `L2GovernanceRelay` storage. This is a trust assumption.
 
 ## For governance operators
 
-- **Pick `delay` carefully.** Setting it absurdly high causes `block.timestamp + delay` to overflow in `relay()`, which then reverts every subsequent inbound message — and the recovery message itself has to flow through the same broken `relay()`. There is currently no enforced upper bound on `delay`; treat it as a one-shot footgun.
+- **Pick `delay` carefully.** Setting it too high will brick execution, as a recovery message itself has to flow through the same broken `relay()`. There is currently no enforced upper bound on `delay`; treat it as a one-shot footgun.
 - **Bootstrap the guardian set as the first L1 action after deployment.** Until a `kiss(usr)` action has flowed through the timelock, there is no `bud` who can veto a malicious action. This window is the most fragile moment in the system's lifecycle.
 - **`actionId` reflects L2 receipt order, not L1 dispatch order.** LayerZero V2 does not enforce strict ordering by default. If L1 dispatches A, B, C, they may land on L2 as ids 1=B, 2=A, 3=C. When choosing what to cancel, work from the on-chain queue, not from the L1 dispatch sequence. Correlate via the inbound LZ `guid` if needed.
 
