@@ -243,6 +243,21 @@ contract L2GovernanceRelayTest is DssTest {
         assertTrue(relay.getActionById(id).executed);
     }
 
+    function testExecZeroDelay() public {
+        vm.prank(address(relay)); relay.file("delay", uint256(0));
+
+        // Queue and exec in the same block/tx — action becomes Ready immediately.
+        uint256 blockTimeAtQueue = block.timestamp;
+        uint256 id = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+
+        assertEq(relay.getActionById(id).executionTime, blockTimeAtQueue);
+        assertEq(uint8(relay.getActionState(id)), uint8(L2GovernanceRelay.ActionState.Ready));
+
+        relay.exec(id);
+        assertEq(block.timestamp, blockTimeAtQueue);
+        assertTrue(relay.getActionById(id).executed);
+    }
+
     function testExecAlreadyExecuted() public {
         uint256 id = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
         vm.warp(block.timestamp + relay.delay());
