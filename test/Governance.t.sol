@@ -136,7 +136,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
 
         // Warp past the configured delay before executing the queued action.
         vm.warp(block.timestamp + bRelay.delay());
-        bRelay.exec(1);
+        bRelay.exec(0);
 
         // Asserting that the data variable has updated in the receiving OApp.
         assertEq(bControlledContract.data(), "test message", "exec data assertion failure");
@@ -181,7 +181,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
 
         // Warp past the configured delay before executing the queued action.
         vm.warp(block.timestamp + bRelay.delay());
-        bRelay.exec(1);
+        bRelay.exec(0);
 
         assertEq(address(bRelay.l2Oapp()), address(0x11));
         assertEq(bRelay.l1GovernanceRelay(), address(0x22));

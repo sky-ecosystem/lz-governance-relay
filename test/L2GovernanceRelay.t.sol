@@ -92,7 +92,7 @@ contract L2GovernanceRelayTest is DssTest {
         assertEq(r.delay(), 2 days);
         assertEq(r.gracePeriod(), 2 hours);
         assertEq(r.actionsCount(), 0);
-        assertEq(r.canceledId(), 0);
+        assertEq(r.firstAvailableId(), 0);
         assertEq(r.bud(address(0xb01)), 1);
         assertEq(r.bud(address(0xb02)), 1);
         assertEq(r.bud(address(0xb03)), 0);
@@ -167,16 +167,16 @@ contract L2GovernanceRelayTest is DssTest {
         uint256 executionTime = block.timestamp + relay.delay();
 
         vm.expectEmit();
-        emit ActionQueued(1, spell, data, executionTime);
+        emit ActionQueued(0, spell, data, executionTime);
         vm.prank(l2Oapp); relay.relay(spell, data);
 
         assertEq(relay.actionsCount(), 1);
-        L2GovernanceRelay.Action memory action = relay.getActionById(1);
+        L2GovernanceRelay.Action memory action = relay.getActionById(0);
         assertEq(action.target, spell);
         assertEq(action.targetData, data);
         assertEq(action.executionTime, executionTime);
         assertFalse(action.executed);
-        assertEq(uint8(relay.getActionState(1)), uint8(L2GovernanceRelay.ActionState.Queued));
+        assertEq(uint8(relay.getActionState(0)), uint8(L2GovernanceRelay.ActionState.Queued));
     }
 
     function testRelayNotFromL2Oapp() public {
@@ -200,7 +200,7 @@ contract L2GovernanceRelayTest is DssTest {
 
     function _queue(address target, bytes memory data) internal returns (uint256 id) {
         vm.prank(l2Oapp); relay.relay(target, data);
-        id = relay.actionsCount();
+        id = relay.actionsCount() - 1;
     }
 
     function testExec() public {
@@ -303,7 +303,7 @@ contract L2GovernanceRelayTest is DssTest {
         emit ActionsCanceled(id2);
         vm.prank(bud); relay.cancel(id2);
 
-        assertEq(relay.canceledId(), id2);
+        assertEq(relay.firstAvailableId(), id3);
         assertEq(uint8(relay.getActionState(id1)), uint8(L2GovernanceRelay.ActionState.Canceled));
         assertEq(uint8(relay.getActionState(id2)), uint8(L2GovernanceRelay.ActionState.Canceled));
         assertEq(uint8(relay.getActionState(id3)), uint8(L2GovernanceRelay.ActionState.Queued));
@@ -318,13 +318,16 @@ contract L2GovernanceRelayTest is DssTest {
 
     function testCancelInvalidId() public {
         vm.prank(address(relay)); relay.kiss(bud);
-        _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
 
+        // No actions queued yet: any id (including 0) is invalid.
         vm.expectRevert("L2GovernanceRelay/invalid-action-id");
         vm.prank(bud); relay.cancel(0);
 
+        _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+
+        // One action queued (id 0): id 1 is above actionsCount.
         vm.expectRevert("L2GovernanceRelay/invalid-action-id");
-        vm.prank(bud); relay.cancel(2);
+        vm.prank(bud); relay.cancel(1);
     }
 
     function testCancelAlreadyIncluded() public {
@@ -332,13 +335,13 @@ contract L2GovernanceRelayTest is DssTest {
         _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
         _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
 
-        vm.prank(bud); relay.cancel(2);
-
-        vm.expectRevert("L2GovernanceRelay/already-included");
-        vm.prank(bud); relay.cancel(2);
+        vm.prank(bud); relay.cancel(1);
 
         vm.expectRevert("L2GovernanceRelay/already-included");
         vm.prank(bud); relay.cancel(1);
+
+        vm.expectRevert("L2GovernanceRelay/already-included");
+        vm.prank(bud); relay.cancel(0);
     }
 
     function testGetActionStateInvalidId() public {
@@ -350,9 +353,9 @@ contract L2GovernanceRelayTest is DssTest {
 
         _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
 
-        vm.expectRevert("L2GovernanceRelay/invalid-action-id");
         relay.getActionState(0);
 
+        vm.expectRevert("L2GovernanceRelay/invalid-action-id");
         relay.getActionState(1);
 
         vm.expectRevert("L2GovernanceRelay/invalid-action-id");

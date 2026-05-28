@@ -25,7 +25,7 @@ contract L2GovernanceRelay {
     IGovernanceOAppReceiver public l2Oapp;                  // Sender address which queues actions
     address                 public l1GovernanceRelay;       // L1 counterpart of this contract (L1 sender)
     uint256                 public actionsCount;            // Number of actions ever created
-    uint256                 public canceledId;              // Cancellation checkpoint Id (all unexecuted actions up to this Id are canceled)
+    uint256                 public firstAvailableId;        // Cancellation checkpoint Id (all unexecuted actions with id < firstAvailableId are canceled)
     uint256                 public delay;                   // The queuing time until the action is ready for execution
     uint256                 public gracePeriod;             // The time window during which an action can be executed after becoming ready, after which it expires
 
@@ -158,17 +158,17 @@ contract L2GovernanceRelay {
     // --- view functions ---
 
     function getActionById(uint256 actionId) external view returns (Action memory) {
-        require(actionId > 0 && actionId <= actionsCount, "L2GovernanceRelay/invalid-action-id");
+        require(actionId < actionsCount, "L2GovernanceRelay/invalid-action-id");
 
         return _actions[actionId];
     }
 
     function getActionState(uint256 actionId) public view returns (ActionState) {
-        require(actionId > 0 && actionId <= actionsCount, "L2GovernanceRelay/invalid-action-id");
+        require(actionId < actionsCount, "L2GovernanceRelay/invalid-action-id");
 
         Action storage action = _actions[actionId];
         if      (action.executed) return ActionState.Executed;
-        else if (actionId <= canceledId) return ActionState.Canceled; // It is fine that expired ones could be "converted" to canceled
+        else if (actionId <  firstAvailableId) return ActionState.Canceled; // It is fine that expired ones could be "converted" to canceled
         else if (block.timestamp >  action.executionTime + gracePeriod) return ActionState.Expired;
         else if (block.timestamp >= action.executionTime) return ActionState.Ready;
         else return ActionState.Queued;
@@ -179,7 +179,7 @@ contract L2GovernanceRelay {
     // Not expected/needed to get eth, hence not payable.
     function relay(address target, bytes calldata targetData) external messageAuth {
         uint256 executionTime = block.timestamp + delay;
-        uint256 actionId = ++actionsCount;
+        uint256 actionId = actionsCount++;
 
         Action storage action = _actions[actionId];
         action.target         = target;
@@ -213,10 +213,10 @@ contract L2GovernanceRelay {
     }
 
     function cancel(uint256 canceledId_) external toll {
-        require(canceledId_ > 0 && canceledId_ <= actionsCount, "L2GovernanceRelay/invalid-action-id");
-        require(canceledId_ > canceledId, "L2GovernanceRelay/already-included");
+        require(canceledId_ < actionsCount, "L2GovernanceRelay/invalid-action-id");
+        require(canceledId_ >= firstAvailableId, "L2GovernanceRelay/already-included");
 
-        canceledId = canceledId_;
+        firstAvailableId = canceledId_ + 1;
 
         emit ActionsCanceled(canceledId_);
     }
