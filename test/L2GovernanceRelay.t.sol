@@ -32,8 +32,10 @@ contract StorageMock {
 }
 
 contract L2SpellMock {
-    function run(address store) external {
+    function run(address store) external returns (uint256) {
         StorageMock(store).markRun();
+
+        return 123;
     }
     function revt() pure external { revert("L2SpellMock/revt"); }
 }
@@ -216,7 +218,7 @@ contract L2GovernanceRelayTest is DssTest {
         assertEq(uint8(relay.getActionState(id)), uint8(L2GovernanceRelay.ActionState.Ready));
 
         vm.expectEmit();
-        emit ActionExecuted(id, address(this), "");
+        emit ActionExecuted(id, address(this), abi.encode(123));
         relay.exec(id);
 
         assertTrue(relay.getActionById(id).executed);
