@@ -51,8 +51,8 @@ relay() ─▶  Queued ─(block.timestamp ≥ executionTime)─▶  Ready ─ex
 
 | Parameter | Set by | Purpose |
 |-----------|--------|---------|
-| `delay` | constructor; `file("delay", …)` | Time between queueing and `Ready`. |
-| `gracePeriod` | constructor; `file("gracePeriod", …)` | Window after `Ready` during which `exec` is callable; must be ≥ `MINIMUM_GRACE_PERIOD` (10 minutes). |
+| `delay` | constructor; `file("delay", …)` | Time between queueing and `Ready`. Snapshotted into each action's `executionTime` at queue time, so changing `delay` only affects actions queued from then on. |
+| `gracePeriod` | constructor; `file("gracePeriod", …)` | Window after `Ready` during which `exec` is callable; must be ≥ `MINIMUM_GRACE_PERIOD` (10 minutes). Unlike `delay`, `gracePeriod` is read live by `getActionState`, so a `file("gracePeriod", …)` change retroactively shifts the expiry of every action already in the queue. |
 | `bud[usr]` | constructor `bud_`; `kiss(usr)` / `diss(usr)` | Guardian whitelist; an initial set may be seeded at deploy time, otherwise set/unset only via self-call. |
 | `l2Oapp` | `file("l2Oapp", …)` | Trusted LZ receiver address whose `messageOrigin` is checked on every `relay()`. |
 | `l1GovernanceRelay` | `file("l1GovernanceRelay", …)` | Expected source-sender on the L1 endpoint. |
