@@ -37,8 +37,9 @@ library GovernanceRelayDeploy {
         address l2Oapp,
         address l1GovernanceRelay,
         uint256 delay,
-        uint256 gracePeriod
+        uint256 gracePeriod,
+        address[] memory bud
     ) internal returns (address l2GovernanceRelay) {
-        l2GovernanceRelay = address(new L2GovernanceRelay(l1Eid, l2Oapp, l1GovernanceRelay, delay, gracePeriod));
+        l2GovernanceRelay = address(new L2GovernanceRelay(l1Eid, l2Oapp, l1GovernanceRelay, delay, gracePeriod, bud));
     }
 }

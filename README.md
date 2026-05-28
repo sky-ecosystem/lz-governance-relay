@@ -53,7 +53,7 @@ relay() ─▶  Queued ─(block.timestamp ≥ executionTime)─▶  Ready ─ex
 |-----------|--------|---------|
 | `delay` | constructor; `file("delay", …)` | Time between queueing and `Ready`. |
 | `gracePeriod` | constructor; `file("gracePeriod", …)` | Window after `Ready` during which `exec` is callable; must be ≥ `MINIMUM_GRACE_PERIOD` (10 minutes). |
-| `bud[usr]` | `kiss(usr)` / `diss(usr)` | Guardian whitelist; set/unset only via self-call. |
+| `bud[usr]` | constructor `bud_`; `kiss(usr)` / `diss(usr)` | Guardian whitelist; an initial set may be seeded at deploy time, otherwise set/unset only via self-call. |
 | `l2Oapp` | `file("l2Oapp", …)` | Trusted LZ receiver address whose `messageOrigin` is checked on every `relay()`. |
 | `l1GovernanceRelay` | `file("l1GovernanceRelay", …)` | Expected source-sender on the L1 endpoint. |
 
@@ -74,7 +74,7 @@ Spells are run as `delegatecall` from `exec`. Two consequences:
 ## For governance operators
 
 - **Pick `delay` carefully.** Setting it too high will brick execution, as a recovery message itself has to flow through the same broken `relay()`. There is currently no enforced upper bound on `delay`; treat it as a one-shot footgun.
-- **Bootstrap the guardian set as the first L1 action after deployment.** Until a `kiss(usr)` action has flowed through the timelock, there is no `bud` who can veto a malicious action. This window is the most fragile moment in the system's lifecycle.
+- **Seed the guardian set at deploy time.** The constructor accepts `bud_` so the relay can launch with a working veto from block one. Without it, there is no `bud` who can veto a malicious action until a `kiss(usr)` spell has flowed through the timelock — a window worth avoiding.
 - **`actionId` reflects L2 receipt order, not L1 dispatch order.** LayerZero V2 does not enforce strict ordering by default. If L1 dispatches A, B, C, they may land on L2 as ids 1=B, 2=A, 3=C. When choosing what to cancel, work from the on-chain queue, not from the L1 dispatch sequence. Correlate via the inbound LZ `guid` if needed.
 
 ## Build

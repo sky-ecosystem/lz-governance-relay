@@ -88,7 +88,7 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         GovernanceRelayInit.init(dss, address(aRelay), address(aGov));
         vm.stopPrank();
 
-        bRelay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(aEid, address(bGov), address(aRelay), DELAY, GRACE_PERIOD));
+        bRelay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(aEid, address(bGov), address(aRelay), DELAY, GRACE_PERIOD, new address[](0)));
 
         bControlledContract = new MockControlledContract(address(bRelay));
 

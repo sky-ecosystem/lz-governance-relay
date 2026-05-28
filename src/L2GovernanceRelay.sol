@@ -98,7 +98,8 @@ contract L2GovernanceRelay {
         address l2Oapp_,
         address l1GovernanceRelay_,
         uint256 delay_,
-        uint256 gracePeriod_
+        uint256 gracePeriod_,
+        address[] memory bud_
     ) {
         require(gracePeriod_ >= MINIMUM_GRACE_PERIOD, "L2GovernanceRelay/grace-period-too-short");
 
@@ -112,6 +113,11 @@ contract L2GovernanceRelay {
         emit File("l1GovernanceRelay", l1GovernanceRelay_);
         emit File("delay", delay_);
         emit File("gracePeriod", gracePeriod_);
+
+        for (uint256 i; i < bud_.length; ++i) {
+            bud[bud_[i]] = 1;
+            emit Kiss(bud_[i]);
+        }
     }
 
     // --- administration functions ---

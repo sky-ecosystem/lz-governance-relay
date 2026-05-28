@@ -59,14 +59,18 @@ contract L2GovernanceRelayTest is DssTest {
         l2Oapp = address(new OappReceiverMock());
         spell = address(new L2SpellMock());
         store = address(new StorageMock());
-        relay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(1, l2Oapp, l1GovernanceRelay, DELAY, GRACE_PERIOD));
+        relay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(1, l2Oapp, l1GovernanceRelay, DELAY, GRACE_PERIOD, new address[](0)));
         OappReceiverMock(l2Oapp).setMessageOrigin(1, bytes32(uint256(uint160(l1GovernanceRelay))));
     }
 
     function testConstructor() public {
+        address[] memory initialBud = new address[](2);
+        initialBud[0] = address(0xb01);
+        initialBud[1] = address(0xb02);
+
         uint256 minGrace = relay.MINIMUM_GRACE_PERIOD();
         vm.expectRevert("L2GovernanceRelay/grace-period-too-short");
-        new L2GovernanceRelay(123, address(0x1), address(0x2), 2 days, minGrace - 1);
+        new L2GovernanceRelay(123, address(0x1), address(0x2), 2 days, minGrace - 1, initialBud);
 
         vm.expectEmit();
         emit File("l2Oapp", address(0x1));
@@ -76,7 +80,11 @@ contract L2GovernanceRelayTest is DssTest {
         emit File("delay", uint256(2 days));
         vm.expectEmit();
         emit File("gracePeriod", uint256(2 hours));
-        L2GovernanceRelay r = new L2GovernanceRelay(123, address(0x1), address(0x2), 2 days, 2 hours);
+        vm.expectEmit();
+        emit Kiss(address(0xb01));
+        vm.expectEmit();
+        emit Kiss(address(0xb02));
+        L2GovernanceRelay r = new L2GovernanceRelay(123, address(0x1), address(0x2), 2 days, 2 hours, initialBud);
 
         assertEq(r.l1Eid(), 123);
         assertEq(address(r.l2Oapp()), address(0x1));
@@ -85,6 +93,9 @@ contract L2GovernanceRelayTest is DssTest {
         assertEq(r.gracePeriod(), 2 hours);
         assertEq(r.actionsCount(), 0);
         assertEq(r.canceledId(), 0);
+        assertEq(r.bud(address(0xb01)), 1);
+        assertEq(r.bud(address(0xb02)), 1);
+        assertEq(r.bud(address(0xb03)), 0);
     }
 
     function testFile() public {
