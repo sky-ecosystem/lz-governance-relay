@@ -309,6 +309,21 @@ contract L2GovernanceRelayTest is DssTest {
         assertEq(uint8(relay.getActionState(id1)), uint8(L2GovernanceRelay.ActionState.Canceled));
         assertEq(uint8(relay.getActionState(id2)), uint8(L2GovernanceRelay.ActionState.Canceled));
         assertEq(uint8(relay.getActionState(id3)), uint8(L2GovernanceRelay.ActionState.Queued));
+
+        // Queue an action that will be executed, then another that will be left to expire.
+        uint256 id4 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+        vm.warp(block.timestamp + relay.delay());
+        relay.exec(id4);
+        assertEq(uint8(relay.getActionState(id4)), uint8(L2GovernanceRelay.ActionState.Executed));
+
+        uint256 id5 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+        vm.warp(block.timestamp + relay.delay() + relay.gracePeriod() + 1);
+        assertEq(uint8(relay.getActionState(id5)), uint8(L2GovernanceRelay.ActionState.Expired));
+
+        // A later checkpoint covering both: Executed survives, Expired folds into Canceled.
+        vm.prank(bud); relay.cancel(id5);
+        assertEq(uint8(relay.getActionState(id4)), uint8(L2GovernanceRelay.ActionState.Executed));
+        assertEq(uint8(relay.getActionState(id5)), uint8(L2GovernanceRelay.ActionState.Canceled));
     }
 
     function testCancelNotWhitelisted() public {
