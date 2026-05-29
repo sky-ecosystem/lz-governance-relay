@@ -25,7 +25,7 @@ contract L2GovernanceRelay {
     IGovernanceOAppReceiver public l2Oapp;                  // Sender address which queues actions
     address                 public l1GovernanceRelay;       // L1 counterpart of this contract (L1 sender)
     uint256                 public actionsCount;            // Number of actions ever created
-    uint256                 public firstAvailableId;        // Cancellation checkpoint Id (all unexecuted actions with id < firstAvailableId are canceled)
+    uint256                 public canceledCount;           // Number of canceled actions (every unexecuted action with id < canceledCount is canceled)
     uint256                 public delay;                   // The queuing time until the action is ready for execution
     uint256                 public gracePeriod;             // The time window during which an action can be executed after becoming ready, after which it expires
 
@@ -168,7 +168,7 @@ contract L2GovernanceRelay {
 
         Action storage action = _actions[actionId];
         if      (action.executed) return ActionState.Executed;
-        else if (actionId <  firstAvailableId) return ActionState.Canceled; // It is fine that expired ones could be "converted" to canceled
+        else if (actionId <  canceledCount) return ActionState.Canceled; // It is fine that expired ones could be "converted" to canceled
         else if (block.timestamp >  action.executionTime + gracePeriod) return ActionState.Expired;
         else if (block.timestamp >= action.executionTime) return ActionState.Ready;
         else return ActionState.Queued;
@@ -214,9 +214,9 @@ contract L2GovernanceRelay {
 
     function cancel(uint256 canceledId_) external toll {
         require(canceledId_ < actionsCount, "L2GovernanceRelay/invalid-action-id");
-        require(canceledId_ >= firstAvailableId, "L2GovernanceRelay/already-included");
+        require(canceledId_ >= canceledCount, "L2GovernanceRelay/already-included");
 
-        firstAvailableId = canceledId_ + 1;
+        canceledCount = canceledId_ + 1;
 
         emit ActionsCanceled(canceledId_);
     }

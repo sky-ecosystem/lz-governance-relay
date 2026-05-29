@@ -94,7 +94,7 @@ contract L2GovernanceRelayTest is DssTest {
         assertEq(r.delay(), 2 days);
         assertEq(r.gracePeriod(), 2 hours);
         assertEq(r.actionsCount(), 0);
-        assertEq(r.firstAvailableId(), 0);
+        assertEq(r.canceledCount(), 0);
         assertEq(r.bud(address(0xb01)), 1);
         assertEq(r.bud(address(0xb02)), 1);
         assertEq(r.bud(address(0xb03)), 0);
@@ -320,7 +320,7 @@ contract L2GovernanceRelayTest is DssTest {
         emit ActionsCanceled(id2);
         vm.prank(bud); relay.cancel(id2);
 
-        assertEq(relay.firstAvailableId(), id3);
+        assertEq(relay.canceledCount(), id3);
         assertEq(uint8(relay.getActionState(id1)), uint8(L2GovernanceRelay.ActionState.Canceled));
         assertEq(uint8(relay.getActionState(id2)), uint8(L2GovernanceRelay.ActionState.Canceled));
         assertEq(uint8(relay.getActionState(id3)), uint8(L2GovernanceRelay.ActionState.Queued));
