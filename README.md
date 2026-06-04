@@ -61,7 +61,7 @@ relay() ─▶  Queued ─(block.timestamp ≥ executionTime)─▶  Ready ─ex
 
 `cancel(canceledId_)` advances a single monotonic checkpoint that vetoes **every** unexecuted action with `id ≤ canceledId_`. Two consequences worth understanding:
 
-- A single `bud` can mass-cancel the entire in-flight queue in one transaction. This is a trust assumption that the guardian will not misbehave.
+- A single `bud` can mass-cancel the entire in-flight queue in one transaction and provoke permanent DoS to the gov relay. This is a trust assumption that the guardian will not misbehave.
 - `cancel` works on `Ready` actions too, not only `Queued` ones.
 
 ## For spell authors
