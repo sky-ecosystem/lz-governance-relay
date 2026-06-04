@@ -25,7 +25,7 @@ contract L2GovernanceRelay {
     IGovernanceOAppReceiver public l2Oapp;                  // Sender address which queues actions
     address                 public l1GovernanceRelay;       // L1 counterpart of this contract (L1 sender)
     uint256                 public actionsCount;            // Number of actions ever created
-    uint256                 public canceledCount;           // Number of canceled actions (every unexecuted action with id < canceledCount is canceled)
+    uint256                 public canceledCount;           // Cancellation threshold (every unexecuted action with id < canceledCount is canceled)
     uint256                 public delay;                   // The queuing time until the action is ready for execution
     uint256                 public gracePeriod;             // The time window during which an action can be executed after becoming ready, after which it expires
 
@@ -121,7 +121,7 @@ contract L2GovernanceRelay {
     }
 
     // --- administration functions ---
-    // These are not a standard authed admin functions, do not copy elsewhere.
+    // These are not standard authed admin functions, do not copy elsewhere.
     // Use caution when changing parameters, as a wrong value can brick remote governance.
 
     function kiss(address usr) external onlySelf {
