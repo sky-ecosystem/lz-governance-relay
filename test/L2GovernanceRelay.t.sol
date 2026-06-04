@@ -181,6 +181,11 @@ contract L2GovernanceRelayTest is DssTest {
         assertEq(uint8(relay.getActionState(0)), uint8(L2GovernanceRelay.ActionState.Queued));
     }
 
+    function testGetActionByIdInvalidId() public {
+        vm.expectRevert("L2GovernanceRelay/invalid-action-id");
+        relay.getActionById(0);
+    }
+
     function testRelayNotFromL2Oapp() public {
         vm.expectRevert("L2GovernanceRelay/bad-message-auth");
         relay.relay(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
