@@ -321,6 +321,10 @@ contract L2GovernanceRelayTest is DssTest {
         uint256 id2 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
         uint256 id3 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
 
+        assertEq(uint8(relay.getActionState(id1)), uint8(L2GovernanceRelay.ActionState.Queued));
+        assertEq(uint8(relay.getActionState(id2)), uint8(L2GovernanceRelay.ActionState.Queued));
+        assertEq(uint8(relay.getActionState(id3)), uint8(L2GovernanceRelay.ActionState.Queued));
+
         vm.expectEmit();
         emit ActionsCanceled(id2);
         vm.prank(bud); relay.cancel(id2);
@@ -337,13 +341,20 @@ contract L2GovernanceRelayTest is DssTest {
         assertEq(uint8(relay.getActionState(id4)), uint8(L2GovernanceRelay.ActionState.Executed));
 
         uint256 id5 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
-        vm.warp(block.timestamp + relay.delay() + relay.gracePeriod() + 1);
+        // Stagger id6 by gracePeriod so that, after the warp below, id5 has expired while id6 is merely ready.
+        vm.warp(block.timestamp + relay.gracePeriod());
+        uint256 id6 = _queue(spell, abi.encodeCall(L2SpellMock.run, (address(store))));
+        vm.warp(block.timestamp + relay.delay() + 1);
         assertEq(uint8(relay.getActionState(id5)), uint8(L2GovernanceRelay.ActionState.Expired));
+        assertEq(uint8(relay.getActionState(id6)), uint8(L2GovernanceRelay.ActionState.Ready));
 
-        // A later checkpoint covering both: Executed survives, Expired folds into Canceled.
-        vm.prank(bud); relay.cancel(id5);
+        // A later checkpoint covering all: Executed survives, while Expired and Ready fold into Canceled.
+        vm.expectEmit();
+        emit ActionsCanceled(id6);
+        vm.prank(bud); relay.cancel(id6);
         assertEq(uint8(relay.getActionState(id4)), uint8(L2GovernanceRelay.ActionState.Executed));
         assertEq(uint8(relay.getActionState(id5)), uint8(L2GovernanceRelay.ActionState.Canceled));
+        assertEq(uint8(relay.getActionState(id6)), uint8(L2GovernanceRelay.ActionState.Canceled));
     }
 
     function testCancelNotWhitelisted() public {
