@@ -261,9 +261,11 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         IEndpointChannel ep = IEndpointChannel(endpoints[bEid]);
         bytes32 peer = addressToBytes32(address(aGov));
 
-        // Nilify an unverified future nonce by passing the empty payload hash.
-        assertEq(ep.inboundPayloadHash(address(bGov), aEid, peer, 1), bytes32(0));
-        vm.prank(guardian); bRelay.nilify(1, bytes32(0));
+        _sendAndVerifyOnly();
+        bytes32 payloadHash = ep.inboundPayloadHash(address(bGov), aEid, peer, 1);
+        assertNotEq(payloadHash, bytes32(0));
+
+        vm.prank(guardian); bRelay.nilify(1, payloadHash);
         assertEq(ep.inboundPayloadHash(address(bGov), aEid, peer, 1), NIL_PAYLOAD_HASH);
     }
 
