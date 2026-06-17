@@ -20,6 +20,7 @@ pragma solidity ^0.8.22;
 import "dss-test/DssTest.sol";
 
 import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
+import { PacketV1Codec } from "@layerzerolabs/lz-evm-protocol-v2/contracts/messagelib/libs/PacketV1Codec.sol";
 import { GovernanceOAppSender, TxParams, MessagingFee } from "lib/sky-oapp-oft/contracts/GovernanceOAppSender.sol";
 import { GovernanceOAppReceiver } from "lib/sky-oapp-oft/contracts/GovernanceOAppReceiver.sol";
 import { MockControlledContract } from "lib/sky-oapp-oft/test/mocks/MockControlledContract.sol";
@@ -37,8 +38,17 @@ contract FileSpell {
     }
 }
 
+// Read-only view of the LayerZero endpoint's inbound channel state, used to assert suppression effects.
+interface IEndpointChannel {
+    function lazyInboundNonce(address oapp, uint32 srcEid, bytes32 sender) external view returns (uint64);
+    function inboundNonce(address oapp, uint32 srcEid, bytes32 sender) external view returns (uint64);
+    function inboundPayloadHash(address oapp, uint32 srcEid, bytes32 sender, uint64 nonce) external view returns (bytes32);
+    function delegates(address oapp) external view returns (address);
+}
+
 contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
     using OptionsBuilder for bytes;
+    using PacketV1Codec for bytes;
 
     DssInstance dss;
 
@@ -50,6 +60,9 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
     GovernanceOAppReceiver bGov;
     L1GovernanceRelay      aRelay;
     L2GovernanceRelay      bRelay;
+
+    address guardian = address(0x6a44d);
+    bytes32 constant NIL_PAYLOAD_HASH = bytes32(type(uint256).max);
 
     uint256 constant DELAY        = 1 days;
     uint256 constant GRACE_PERIOD = 1 hours;
@@ -88,7 +101,12 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
         GovernanceRelayInit.init(dss, address(aRelay), address(aGov));
         vm.stopPrank();
 
-        bRelay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(aEid, address(bGov), address(aRelay), DELAY, GRACE_PERIOD, new address[](0)));
+        address[] memory buds = new address[](1);
+        buds[0] = guardian;
+        bRelay = L2GovernanceRelay(GovernanceRelayDeploy.deployL2(aEid, address(bGov), address(aRelay), DELAY, GRACE_PERIOD, buds));
+
+        // bRelay is bGov's endpoint delegate, so it can manage bGov's inbound channel (skip/nilify/burn/clear).
+        bGov.setDelegate(address(bRelay));
 
         bControlledContract = new MockControlledContract(address(bRelay));
 
@@ -185,5 +203,114 @@ contract GovernanceTest is TestHelperOz5WithRevertAssertions, DssTest {
 
         assertEq(address(bRelay.l2Oapp()), address(0x11));
         assertEq(bRelay.l1GovernanceRelay(), address(0x22));
+    }
+
+    // --- LayerZero channel suppression against the real endpoint ---
+    // bRelay is seeded with `guardian` as a bud and set as bGov's endpoint delegate in setUp.
+
+    // Sends one governance message L1 -> L2 and verifies (commits) it WITHOUT executing lzReceive, leaving a
+    // verified-but-undelivered inbound packet at nonce 1 — the "stuck message" these functions exist to clear.
+    function _sendAndVerifyOnly() internal returns (bytes32 guid, bytes memory message) {
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
+        MockSpell spell = new MockSpell(bControlledContract);
+
+        TxParams memory txParams = TxParams({
+            dstEid       : bEid,
+            dstTarget    : addressToBytes32(address(bRelay)),
+            dstCallData  : abi.encodeWithSelector(bRelay.relay.selector, address(spell), abi.encodeWithSelector(spell.cast.selector)),
+            extraOptions : options
+        });
+        MessagingFee memory fee = aGov.quoteTx(txParams, false);
+        vm.deal(address(aRelay), fee.nativeFee);
+
+        vm.prank(pauseProxy); aRelay.relayEVM({
+            dstEid            : bEid,
+            l2GovernanceRelay : address(bRelay),
+            target            : address(spell),
+            targetData        : abi.encodeWithSelector(spell.cast.selector),
+            extraOptions      : options,
+            fee               : fee,
+            refundAddress     : address(this)
+        });
+
+        bytes memory packetBytes = getNextInflightPacket(uint16(bEid), addressToBytes32(address(bGov)));
+        this.validatePacket(packetBytes, "");
+        guid    = this.packetGuid(packetBytes);
+        message = this.packetMessage(packetBytes);
+    }
+
+    // PacketV1Codec slices calldata, so expose external helpers to decode an in-memory packet.
+    function packetGuid(bytes calldata p) external pure returns (bytes32) { return p.guid(); }
+    function packetMessage(bytes calldata p) external pure returns (bytes memory) { return p.message(); }
+
+    function testEndpointSkip() public {
+        IEndpointChannel ep = IEndpointChannel(endpoints[bEid]);
+        bytes32 peer = addressToBytes32(address(aGov));
+
+        assertEq(ep.lazyInboundNonce(address(bGov), aEid, peer), 0);
+
+        // Non-bud is rejected at the relay before reaching the endpoint.
+        vm.expectRevert("L2GovernanceRelay/not-whitelisted");
+        bRelay.skip(1);
+
+        vm.prank(guardian); bRelay.skip(1);
+        assertEq(ep.lazyInboundNonce(address(bGov), aEid, peer), 1);
+    }
+
+    function testEndpointNilify() public {
+        IEndpointChannel ep = IEndpointChannel(endpoints[bEid]);
+        bytes32 peer = addressToBytes32(address(aGov));
+
+        _sendAndVerifyOnly();
+        bytes32 payloadHash = ep.inboundPayloadHash(address(bGov), aEid, peer, 1);
+        assertNotEq(payloadHash, bytes32(0));
+
+        vm.prank(guardian); bRelay.nilify(1, payloadHash);
+        assertEq(ep.inboundPayloadHash(address(bGov), aEid, peer, 1), NIL_PAYLOAD_HASH);
+    }
+
+    function testEndpointClear() public {
+        IEndpointChannel ep = IEndpointChannel(endpoints[bEid]);
+        bytes32 peer = addressToBytes32(address(aGov));
+
+        (bytes32 guid, bytes memory message) = _sendAndVerifyOnly();
+
+        // Verified but not yet delivered: payload hash present, lazy nonce not advanced.
+        assertNotEq(ep.inboundPayloadHash(address(bGov), aEid, peer, 1), bytes32(0));
+        assertEq(ep.lazyInboundNonce(address(bGov), aEid, peer), 0);
+
+        vm.prank(guardian); bRelay.clear(1, guid, message);
+
+        // Consumed without delivery: payload cleared, lazy nonce advanced past it.
+        assertEq(ep.inboundPayloadHash(address(bGov), aEid, peer, 1), bytes32(0));
+        assertEq(ep.lazyInboundNonce(address(bGov), aEid, peer), 1);
+    }
+
+    function testEndpointBurn() public {
+        IEndpointChannel ep = IEndpointChannel(endpoints[bEid]);
+        bytes32 peer = addressToBytes32(address(aGov));
+
+        _sendAndVerifyOnly();
+        bytes32 payloadHash = ep.inboundPayloadHash(address(bGov), aEid, peer, 1);
+        assertNotEq(payloadHash, bytes32(0));
+
+        // burn() only applies to nonces at or below the lazy nonce, so skip past nonce 1 first.
+        vm.prank(guardian); bRelay.skip(2);
+        assertEq(ep.lazyInboundNonce(address(bGov), aEid, peer), 2);
+
+        vm.prank(guardian); bRelay.burn(1, payloadHash);
+        assertEq(ep.inboundPayloadHash(address(bGov), aEid, peer, 1), bytes32(0));
+    }
+
+    function testEndpointSuppressionRevertsWhenNotDelegate() public {
+        IEndpointChannel ep = IEndpointChannel(endpoints[bEid]);
+
+        // Point the delegate away from bRelay so it is no longer authorized on the endpoint.
+        bGov.setDelegate(address(0xdead));
+        assertNotEq(ep.delegates(address(bGov)), address(bRelay));
+
+        // The relay is a bud, so it passes `toll`, but the endpoint rejects the unauthorized caller.
+        vm.expectRevert(abi.encodeWithSignature("LZ_Unauthorized()"));
+        vm.prank(guardian); bRelay.skip(1);
     }
 }

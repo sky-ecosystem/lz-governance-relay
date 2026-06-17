@@ -17,17 +17,44 @@
 
 pragma solidity ^0.8.22;
 
-import { IGovernanceOAppReceiver, MessageOrigin } from "lib/sky-oapp-oft/contracts/interfaces/IGovernanceOAppReceiver.sol";
+// Information about the origin of a cross-chain governance message (matches the GovernanceOAppReceiver's).
+struct MessageOrigin {
+    uint32  srcEid;
+    bytes32 srcSender;
+}
+
+// LayerZero V2 inbound-channel origin descriptor (matches ILayerZeroEndpointV2.Origin).
+struct Origin {
+    uint32  srcEid;
+    bytes32 sender;
+    uint64  nonce;
+}
+
+// Minimal view of the GovernanceOAppReceiver used as l2Oapp: the message origin checked on every
+// relay(), the LayerZero endpoint it is registered with, and its peer (the L1 source OApp) per srcEid.
+interface GovernanceReceiverOappLike {
+    function messageOrigin() external view returns (MessageOrigin memory);
+    function endpoint() external view returns (address);
+    function peers(uint32 srcEid) external view returns (bytes32);
+}
+
+// Minimal view of the LayerZero V2 endpoint, used to unstick the inbound message channel.
+interface EndpointLike {
+    function skip(address oapp, uint32 srcEid, bytes32 sender, uint64 nonce) external;
+    function nilify(address oapp, uint32 srcEid, bytes32 sender, uint64 nonce, bytes32 payloadHash) external;
+    function burn(address oapp, uint32 srcEid, bytes32 sender, uint64 nonce, bytes32 payloadHash) external;
+    function clear(address oapp, Origin calldata origin, bytes32 guid, bytes calldata message) external;
+}
 
 contract L2GovernanceRelay {
     // --- storage variables ---
 
-    IGovernanceOAppReceiver public l2Oapp;                  // Sender address which queues actions
-    address                 public l1GovernanceRelay;       // L1 counterpart of this contract (L1 sender)
-    uint256                 public actionsCount;            // Number of actions ever created
-    uint256                 public canceledCount;           // Cancellation threshold (every unexecuted action with id < canceledCount is canceled)
-    uint256                 public delay;                   // The queuing time until the action is ready for execution
-    uint256                 public gracePeriod;             // The time window during which an action can be executed after becoming ready, after which it expires
+    GovernanceReceiverOappLike public l2Oapp;               // Sender address which queues actions
+    address                    public l1GovernanceRelay;    // L1 counterpart of this contract (L1 sender)
+    uint256                    public actionsCount;         // Number of actions ever created
+    uint256                    public canceledCount;        // Cancellation threshold (every unexecuted action with id < canceledCount is canceled)
+    uint256                    public delay;                // The queuing time until the action is ready for execution
+    uint256                    public gracePeriod;          // The time window during which an action can be executed after becoming ready, after which it expires
 
     mapping(uint256 id  => Action) private _actions;        // Mapping of actions created
     mapping(address usr => uint256 whitelisted) public bud; // Guardians that can cancel queued actions
@@ -104,7 +131,7 @@ contract L2GovernanceRelay {
         require(gracePeriod_ >= MINIMUM_GRACE_PERIOD, "L2GovernanceRelay/grace-period-too-short");
 
         l1Eid             = l1Eid_;
-        l2Oapp            = IGovernanceOAppReceiver(l2Oapp_);
+        l2Oapp            = GovernanceReceiverOappLike(l2Oapp_);
         l1GovernanceRelay = l1GovernanceRelay_;
         delay             = delay_;
         gracePeriod       = gracePeriod_;
@@ -137,7 +164,7 @@ contract L2GovernanceRelay {
     }
 
     function file(bytes32 what, address data) external onlySelf {
-        if      (what == "l2Oapp")            l2Oapp            = IGovernanceOAppReceiver(data);
+        if      (what == "l2Oapp")            l2Oapp            = GovernanceReceiverOappLike(data);
         else if (what == "l1GovernanceRelay") l1GovernanceRelay = data;
         else revert("L2GovernanceRelay/file-unrecognized-param");
 
@@ -219,5 +246,27 @@ contract L2GovernanceRelay {
         canceledCount = canceledId_ + 1;
 
         emit ActionsCanceled(canceledId_);
+    }
+
+    // Endpoint functions
+
+    function skip(uint64 nonce) external toll {
+        GovernanceReceiverOappLike l2Oapp_ = l2Oapp;
+        EndpointLike(l2Oapp_.endpoint()).skip(address(l2Oapp_), l1Eid, l2Oapp_.peers(l1Eid), nonce);
+    }
+
+    function nilify(uint64 nonce, bytes32 payloadHash) external toll {
+        GovernanceReceiverOappLike l2Oapp_ = l2Oapp;
+        EndpointLike(l2Oapp_.endpoint()).nilify(address(l2Oapp_), l1Eid, l2Oapp_.peers(l1Eid), nonce, payloadHash);
+    }
+
+    function burn(uint64 nonce, bytes32 payloadHash) external toll {
+        GovernanceReceiverOappLike l2Oapp_ = l2Oapp;
+        EndpointLike(l2Oapp_.endpoint()).burn(address(l2Oapp_), l1Eid, l2Oapp_.peers(l1Eid), nonce, payloadHash);
+    }
+
+    function clear(uint64 nonce, bytes32 guid, bytes calldata message) external toll {
+        GovernanceReceiverOappLike l2Oapp_ = l2Oapp;
+        EndpointLike(l2Oapp_.endpoint()).clear(address(l2Oapp_), Origin(l1Eid, l2Oapp_.peers(l1Eid), nonce), guid, message);
     }
 }

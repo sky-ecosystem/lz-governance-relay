@@ -47,6 +47,12 @@ relay() ─▶  Queued ─(block.timestamp ≥ executionTime)─▶  Ready ─ex
 
 `getActionState(id)` resolves state in priority order: `Executed` → `Canceled` → `Expired` → `Ready` → `Queued`. An action that expired but is also captured by a later cancellation reads as `Canceled`.
 
+#### Guardian channel suppression
+
+Beyond `cancel` (which vetoes already-queued actions), guardians can also unstick or modify the LayerZero inbound message channel itself via `skip`, `nilify`, `burn`, and `clear`. These are thin `toll`-gated forwarders to the LZ Endpoint (the same `bud` whitelist as `cancel`). They take only the message-specific arguments (`nonce`, and where relevant `payloadHash` / `guid` + `message`); the inbound channel coordinates `(oapp, srcEid, sender)` are all derived on-chain — `oapp` is this relay's `l2Oapp`, `srcEid` is `l1Eid` (the only source `messageAuth` accepts), and `sender` is `l2Oapp.peers(l1Eid)` (the L1 source OApp). They matter because a LayerZero inbound nonce must be verified before any later nonce can execute, so a single unverifiable message — a send/receive DVN-set mismatch, a withheld attestation, an otherwise unverifiable payload — stalls the whole queue. When remote governance cannot deliver a fix (because the fix would itself have to flow through the stalled channel), a guardian can clear the blockage.
+
+The Endpoint is read live from `l2Oapp.endpoint()` on each call, so it always tracks the currently configured `l2Oapp`. For these calls to succeed, the relay must be configured as the **delegate** of `l2Oapp` on the Endpoint. Note that `sender` resolves to the *current* peer: if the `l2Oapp` peer for `l1Eid` is re-set, a message sent under the previous peer can no longer be cleared this way.
+
 #### Configuration parameters
 
 | Parameter | Set by | Purpose |
@@ -63,6 +69,8 @@ relay() ─▶  Queued ─(block.timestamp ≥ executionTime)─▶  Ready ─ex
 
 - A single `bud` can mass-cancel the entire in-flight queue in one transaction and provoke permanent DoS to the gov relay. This is a trust assumption that the guardian will not misbehave.
 - `cancel` works on `Ready` actions too, not only `Queued` ones.
+
+The channel-suppression functions (`skip` / `nilify` / `burn` / `clear`) extend the same trust model: a guardian who can stop the channel can also be a DoS vector. This does not broaden the existing assumption — a `bud` already holds an effective freeze via mass-`cancel` — it just lets the guardian intervene one layer lower, at the LZ Endpoint, where `cancel` cannot reach.
 
 ## For spell authors
 

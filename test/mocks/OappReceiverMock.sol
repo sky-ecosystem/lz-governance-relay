@@ -20,12 +20,22 @@ pragma solidity ^0.8.22;
 import { MessageOrigin } from "lib/sky-oapp-oft/contracts/interfaces/IGovernanceOAppReceiver.sol";
 
 contract OappReceiverMock {
-    MessageOrigin public messageOrigin;
+    MessageOrigin                public messageOrigin;
+    address                      public endpoint;
+    mapping(uint32 => bytes32)   public peers;
+
+    constructor(address endpoint_) {
+        endpoint = endpoint_;
+    }
 
     function setMessageOrigin(uint32 _eid, bytes32 _caller) external {
         messageOrigin = MessageOrigin({
             srcEid    : _eid,
             srcSender : _caller
         });
+    }
+
+    function setPeer(uint32 _eid, bytes32 _peer) external {
+        peers[_eid] = _peer;
     }
 }
