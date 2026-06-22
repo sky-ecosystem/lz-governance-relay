@@ -78,6 +78,7 @@ Spells are run as `delegatecall` from `exec`. Two consequences:
 
 1. **`msg.sender` inside the spell is the address that called `exec`** — which is permissionless. Any caller can trigger execution once the timelock elapses. Do **not** write spells that read `msg.sender` for trust decisions.
 2. Spells must always be stateless to prevent corruption of the `L2GovernanceRelay` storage. This is a trust assumption.
+3. Spells require to be fully atomic, they must revert if all intended effects cannot be completed. Avoid graceful early returns, swallowed low-level call failures, or low-gas fallback paths that can return success after partial execution.
 
 ## For governance operators
 
